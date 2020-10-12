@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ .title }}</title>
+  </head>
+  <body>
+    {{ range $company := .companyList }}
+      {{ range $key, $value := $company }}
+        {{ if $key }}
+          설명: {{ $value }}<br><br>
+        {{ else }}
+          회사명: {{ $value }}<br>
+        {{ end }}
+      {{ end }}
+    {{ end }}
+  </body>
+</html>
