@@ -1,30 +1,40 @@
 package main
 
 import (
-  "fmt"
+  //"syscall"
   "os"
+  //"os/signal"
   "math/rand"
   "net/http"
-  "github.com/JominJun/goStock/module"
   "github.com/gin-gonic/gin"
   "github.com/go-echarts/go-echarts/charts"
+
+  md "github.com/JominJun/goStock/module"
 
   // Library for DB
   _ "github.com/lib/pq"
 )
 
 func main() {
-  db := module.ConnectToDB(module.MySQLInfo)
+  db := md.ConnectToDB(md.MySQLInfo)
   defer db.Close()
-  module.CheckErr(db.Ping())
+  md.CheckErr(db.Ping())
 
-  //module.BankruptCompany(db, "민준제과")
-  //module.AddCompany(db, module.Company{Name: "민준귀비", Description: "마약류 제조"}, 500)
-  //module.SetStockInfo(db, module.CompanyStock{Name: "sdfsdf", StockValue: 3000})
-  fmt.Println(module.ShowAllCompany(db))
+/*
+  sc := make(chan os.Signal, 1)
+	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
+  md.Init(sc, db)
+	<-sc
+*/
 
+  //md.Register(db, md.UserInfo{ID: "test", PW: "test", Name: "test"})
+  md.Login(db, md.UserInfo{ID: "test", PW: "test"})
+  md.PurchaseStock(db, "제주여행", 1, md.UserInfo{ID: "test", Name: "test"})
+
+
+  // router용으로 정제
   var companyList [][]string
-  for _, company := range module.ShowAllCompany(db) {
+  for _, company := range md.ShowAllCompany(db) {
     var tempList []string
     tempList = append(tempList, company.Name)
     tempList = append(tempList, company.Description)
@@ -64,7 +74,7 @@ func runRouter(companyList [][]string) {
     AddYAxis("민준농업", valueItems, charts.LineOpts{Smooth: true})
 
     f, err := os.Create("./templates/chart.html")
-    module.CheckErr(err)
+    md.CheckErr(err)
     line.Render(f)
 
 		c.HTML(http.StatusOK, "chart.html", gin.H{})
