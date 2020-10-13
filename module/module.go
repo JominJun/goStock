@@ -1,6 +1,7 @@
 package module
 
 import (
+	"strconv"
   "os"
   "fmt"
   "time"
@@ -42,6 +43,7 @@ type UserInfo struct {
   ID    string
   PW    string
   Name  string
+  Money int
 }
 
 // MySQLInfo is my sql info
@@ -52,8 +54,8 @@ var MySQLInfo = SQLInfo {
 	Password: "비밀",
   Dbname: "goStock"}
   
-// 현재 로그인 정보
-var nowLoginInfo UserInfo
+// NowLoginInfo : 현재 로그인 정보
+var NowLoginInfo UserInfo
 
 // CheckErr checks error
 func CheckErr (err error) {
@@ -76,6 +78,32 @@ func Init(sc chan os.Signal, dbInfo *sql.DB) {
 			}
 		}
 	}()
+}
+
+// FormatNumbers formats number with commas
+func FormatNumbers(n int) string {
+	in := strconv.FormatInt(int64(n), 10)
+	numOfDigits := len(in)
+	if n < 0 {
+		numOfDigits-- // First character is the - sign (not a digit)
+	}
+	numOfCommas := (numOfDigits - 1) / 3
+
+	out := make([]byte, len(in)+numOfCommas)
+	if n < 0 {
+		in, out[0] = in[1:], '-'
+	}
+
+	for i, j, k := len(in)-1, len(out)-1, 0; ; i, j = i-1, j-1 {
+		out[j] = in[i]
+		if i == 0 {
+			return string(out)
+		}
+		if k++; k == 3 {
+			j, k = j-1, 0
+			out[j] = ','
+		}
+	}
 }
 
 // ConnectToDB connects to db
@@ -126,9 +154,9 @@ func Login(dbInfo *sql.DB, userInfo UserInfo) {
   CheckErr(err)
 
   if CountRows(rows) > 0 {
-    nowLoginInfo = GetUserInfo(dbInfo, userInfo.ID)
+    NowLoginInfo = GetUserInfo(dbInfo, userInfo.ID)
     
-    text := fmt.Sprintf("성공적으로 로그인하였습니다: %s(%s)", nowLoginInfo.Name, nowLoginInfo.ID)
+    text := fmt.Sprintf("성공적으로 로그인하였습니다: %s(%s)", NowLoginInfo.Name, NowLoginInfo.ID)
     color.Green(text)
   } else {
     color.Red("잘못된 ID 또는 PW입니다")
@@ -137,14 +165,14 @@ func Login(dbInfo *sql.DB, userInfo UserInfo) {
 
 // GetUserInfo gets user info
 func GetUserInfo(dbInfo *sql.DB, userID string) UserInfo {
-  rows, err := dbInfo.Query(fmt.Sprintf("SELECT id, name FROM public.user WHERE id='%s'", userID))
+  rows, err := dbInfo.Query(fmt.Sprintf("SELECT id, name, money FROM public.user WHERE id='%s'", userID))
   CheckErr(err)
 
   var result UserInfo
 
   for rows.Next() {
     var u UserInfo
-    err := rows.Scan(&u.ID, &u.Name)
+    err := rows.Scan(&u.ID, &u.Name, &u.Money)
     CheckErr(err)
 
     result = u
@@ -270,8 +298,28 @@ func ResetStockValues(dbInfo *sql.DB) {
 // PurchaseStock : 주식 구매
 func PurchaseStock(dbInfo *sql.DB, companyName string, number int, trader UserInfo) {
   company := ShowCompany(dbInfo, companyName)
-  fmt.Println(company)
-  //query := fmt.Sprintf("INSERT INTO stocks(company_name, number, traded_value, trader_name, date) VALUES(%s, %d, %d, %s, %s)")
+  ownedMoney := GetUserInfo(dbInfo, trader.ID).Money
+  needMoney := company.StockValue * number
+
+  if ownedMoney > needMoney {
+    query := fmt.Sprintf("INSERT INTO stocks(company_name, number, traded_value, trader_id, date) VALUES('%s', %d, %d, '%s', '%s')",
+    companyName, number, company.StockValue, trader.Name, getNowTime())
+    _, err := dbInfo.Query(query)
+    CheckErr(err)
+
+    query2 := fmt.Sprintf("UPDATE public.user SET money = %d WHERE id='%s'", ownedMoney - needMoney, trader.ID)
+    _, err2 := dbInfo.Query(query2)
+    CheckErr(err2)
+
+    text := fmt.Sprintf("[%s] %d주 구매하였습니다\n" +
+    "잔액: %s원",
+    companyName, number, FormatNumbers(GetUserInfo(dbInfo, trader.ID).Money))
+    color.Green(text)
+  } else {
+    color.Red(fmt.Sprintf("금액이 부족합니다\n" +
+    "[%s] : 1주 당 %s원\n" +
+    "==> %s원 더 필요", companyName, FormatNumbers(company.StockValue), FormatNumbers(needMoney - ownedMoney)))
+  }
 }
 
 // ShowCompany shows company from DB
