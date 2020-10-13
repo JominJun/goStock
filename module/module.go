@@ -34,8 +34,14 @@ type Company struct {
 
 // CompanyStock is struct of a company's stock
 type CompanyStock struct {
-	Name	string
+	Name	      string
 	StockValue	int
+}
+
+// MyStock is struct of my stock
+type MyStock struct {
+  Name    string
+  Number  int
 }
 
 // UserInfo is user info
@@ -171,11 +177,8 @@ func GetUserInfo(dbInfo *sql.DB, userID string) UserInfo {
   var result UserInfo
 
   for rows.Next() {
-    var u UserInfo
-    err := rows.Scan(&u.ID, &u.Name, &u.Money)
+    err := rows.Scan(&result.ID, &result.Name, &result.Money)
     CheckErr(err)
-
-    result = u
   }
 
   return result
@@ -320,6 +323,51 @@ func PurchaseStock(dbInfo *sql.DB, companyName string, number int, trader UserIn
     "[%s] : 1주 당 %s원\n" +
     "==> %s원 더 필요", companyName, FormatNumbers(company.StockValue), FormatNumbers(needMoney - ownedMoney)))
   }
+}
+
+// InquiryMyStocks : 보유 주식 전부 조회
+func InquiryMyStocks(dbInfo *sql.DB, userInfo UserInfo) {
+  query := fmt.Sprintf("SELECT company_name, number FROM public.stocks WHERE trader_id='%s'", userInfo.ID)
+  rows, err := dbInfo.Query(query)
+  CheckErr(err)
+  
+  var myStocksName []string
+  var myStocksCnt []int
+
+  for rows.Next() { // row
+    // 값 받기
+    var stockCompany string
+    var stockCnt, blockAddress int
+    isBought := false
+    err := rows.Scan(&stockCompany, &stockCnt)
+    CheckErr(err)
+
+    for i, v := range myStocksName {
+      // 이전에 주식을 산 적이 있다면
+      if v == stockCompany {
+        isBought = true
+        blockAddress = i
+      }
+    }
+
+    if isBought {
+      // 해당 칸에 구매한 만큼 추가
+      myStocksCnt[blockAddress] += stockCnt
+    } else {
+      myStocksName = append(myStocksName, stockCompany)
+      myStocksCnt = append(myStocksCnt, stockCnt)
+    }
+  }
+
+  var myStocks []MyStock
+  for j, stockName := range(myStocksName) {
+    var myStock MyStock
+    myStock.Name = stockName
+    myStock.Number = myStocksCnt[j]
+    myStocks = append(myStocks, myStock)
+  }
+
+  fmt.Println(myStocks)
 }
 
 // ShowCompany shows company from DB

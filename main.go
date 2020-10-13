@@ -28,8 +28,11 @@ func main() {
 */
 
   //md.Register(db, md.UserInfo{ID: "test", PW: "test", Name: "test"})
-  md.Login(db, md.UserInfo{ID: "test", PW: "test"})
-  md.PurchaseStock(db, "제주여행", 1, md.NowLoginInfo)
+  userInfo := md.UserInfo{ID: "test", PW: "test"}
+
+  md.Login(db, userInfo)
+  //md.PurchaseStock(db, "YG약국", 2, md.NowLoginInfo)
+  md.InquiryMyStocks(db, userInfo)
 
 
   // router용으로 정제
