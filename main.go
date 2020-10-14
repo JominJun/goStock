@@ -1,6 +1,7 @@
 package main
 
 import (
+  "fmt"
   //"syscall"
   "os"
   //"os/signal"
@@ -31,8 +32,10 @@ func main() {
   userInfo := md.UserInfo{ID: "test", PW: "test"}
 
   md.Login(db, userInfo)
-  //md.PurchaseStock(db, "YG약국", 2, md.NowLoginInfo)
-  md.InquiryMyStocks(db, userInfo)
+  //md.PurchaseStock(db, "리브스엔터테인먼트", 1, md.NowLoginInfo)
+  fmt.Println("보유주식: ", md.InquiryMyStocks(db, userInfo))
+  md.SellStock(db, md.MyStock{Name: "리브스엔터테인먼트", Number: 1}, md.NowLoginInfo)
+  fmt.Println("보유주식: ", md.InquiryMyStocks(db, userInfo))
 
 
   // router용으로 정제

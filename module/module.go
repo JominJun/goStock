@@ -325,8 +325,69 @@ func PurchaseStock(dbInfo *sql.DB, companyName string, number int, trader UserIn
   }
 }
 
+// SellStock : 주식 판매
+func SellStock(dbInfo *sql.DB, stockToSell MyStock, userInfo UserInfo) {
+  query := fmt.Sprintf("SELECT seq, company_name, number, traded_value, trader_id FROM stocks WHERE company_name='%s' AND trader_id='%s'", stockToSell.Name, userInfo.ID)
+  rows, err := dbInfo.Query(query)
+  CheckErr(err)
+
+  ownedCnt := 0
+  for _, myStock := range(InquiryMyStocks(dbInfo, userInfo)) { // 판매할 개수만큼 주식을 보유했는지 확인
+    if myStock.Name == stockToSell.Name {
+      ownedCnt += myStock.Number
+    }
+  }
+
+  stockNowValue := ShowCompany(dbInfo, stockToSell.Name).StockValue
+  leftStockToSell := stockToSell.Number
+  gainedMoneyBySelling := 0
+
+  if ownedCnt >= stockToSell.Number {
+    for rows.Next() {
+      if leftStockToSell > 0 {
+        var companyName, traderID string
+        var seq, number, tradedValue, selledAmount int
+        rows.Scan(&seq, &companyName, &number, &tradedValue, &traderID)
+
+        if leftStockToSell < number {
+          // UPDATE 쿼리
+          query := fmt.Sprintf("UPDATE stocks SET number=%d WHERE seq=%d", number - leftStockToSell, seq)
+          _, err := dbInfo.Query(query)
+          CheckErr(err)
+
+          leftStockToSell = 0
+          selledAmount = leftStockToSell
+        } else {
+          // DELETE 쿼리
+          query := fmt.Sprintf("DELETE FROM stocks WHERE seq=%d", seq)
+          _, err := dbInfo.Query(query)
+          CheckErr(err)
+
+          leftStockToSell -= number
+          selledAmount = number
+        }
+
+        // 판매한 만큼 돈 지급하기
+        query := fmt.Sprintf("UPDATE public.user SET money=money+%d WHERE id='%s'", stockNowValue * selledAmount, userInfo.ID)
+        _, err := dbInfo.Query(query)
+        CheckErr(err)
+
+        gainedMoneyBySelling += stockNowValue * selledAmount
+      } else {
+        break
+      }
+    }
+
+    text := fmt.Sprintf("[%s] %d주 판매완료\n" +
+    "%d x %d = %d원 지급하였습니다", stockToSell.Name, stockToSell.Number, stockNowValue, stockToSell.Number, gainedMoneyBySelling)
+    color.Green(text)
+  } else {
+    color.Red("보유한 주가 판매할 주보다 적습니다")
+  }
+}
+
 // InquiryMyStocks : 보유 주식 전부 조회
-func InquiryMyStocks(dbInfo *sql.DB, userInfo UserInfo) {
+func InquiryMyStocks(dbInfo *sql.DB, userInfo UserInfo) []MyStock {
   query := fmt.Sprintf("SELECT company_name, number FROM public.stocks WHERE trader_id='%s'", userInfo.ID)
   rows, err := dbInfo.Query(query)
   CheckErr(err)
@@ -367,7 +428,7 @@ func InquiryMyStocks(dbInfo *sql.DB, userInfo UserInfo) {
     myStocks = append(myStocks, myStock)
   }
 
-  fmt.Println(myStocks)
+  return myStocks
 }
 
 // ShowCompany shows company from DB
