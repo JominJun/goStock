@@ -10,6 +10,7 @@ import (
   "math/rand"
   "database/sql"
   "github.com/fatih/color"
+  "github.com/dgrijalva/jwt-go"
 
   // Library for DB
   _ "github.com/lib/pq"
@@ -51,6 +52,7 @@ type UserInfo struct {
   PW    string
   Name  string
   Money int
+  jwt.StandardClaims
 }
 
 // MySQLInfo is my sql info
@@ -124,7 +126,8 @@ func ConnectToDB(sqlInfo SQLInfo) *sql.DB {
   return db
 }
 
-func hashPW(pw string) string {
+// HashPW hash PW
+func HashPW(pw string) string {
   hash := sha256.New()
   hash.Write([]byte(pw))
   hashPW := hex.EncodeToString(hash.Sum(nil))
@@ -134,7 +137,7 @@ func hashPW(pw string) string {
 
 // Register is for registering
 func Register(dbInfo *sql.DB, userInfo UserInfo) {
-  userInfo.PW = hashPW(userInfo.PW)
+  userInfo.PW = HashPW(userInfo.PW)
 
   rows, err := dbInfo.Query("SELECT COUNT(*) as count FROM public.user WHERE id='" + userInfo.ID + "'")
   CheckErr(err)
@@ -155,7 +158,7 @@ func Register(dbInfo *sql.DB, userInfo UserInfo) {
 // Login is for logining
 func Login(dbInfo *sql.DB, userInfo UserInfo) {
   query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s' AND pw='%s'",
-  userInfo.ID, hashPW(userInfo.PW))
+  userInfo.ID, HashPW(userInfo.PW))
   rows, err := dbInfo.Query(query)
   CheckErr(err)
 

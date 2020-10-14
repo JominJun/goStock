@@ -1,91 +1,91 @@
 package main
 
 import (
-  //"syscall"
-  "os"
-  //"os/signal"
-  "math/rand"
+  "fmt"
+  "time"
   "net/http"
+  "database/sql"
   "github.com/gin-gonic/gin"
-  "github.com/go-echarts/go-echarts/charts"
-
-  md "github.com/JominJun/goStock/module"
-
-  // Library for DB
-  _ "github.com/lib/pq"
+  "github.com/fatih/color"
+  "github.com/dgrijalva/jwt-go"
+  stock "github.com/JominJun/goStock/module"
 )
 
-func main() {
-  db := md.ConnectToDB(md.MySQLInfo)
-  defer db.Close()
-  md.CheckErr(db.Ping())
-
-/*
-  sc := make(chan os.Signal, 1)
-	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
-  md.Init(sc, db)
-	<-sc
-*/
-
-  //md.Register(db, md.UserInfo{ID: "test", PW: "test", Name: "test"})
-  userInfo := md.UserInfo{ID: "test", PW: "test"}
-
-  md.Login(db, userInfo)
-  //md.PurchaseStock(db, "민준귀비", 7, md.NowLoginInfo)
-  //md.ResetStockValues(db)
-  myStocks := md.InquiryMyStocks(db, userInfo)
-  md.ShowProfitTable(db, myStocks)
-  //md.SellStock(db, md.MyStock{Name: "리브스엔터테인먼트", Number: 1}, md.NowLoginInfo)
-  //fmt.Println("보유주식: ", md.InquiryMyStocks(db, userInfo))
-
-
-  // router용으로 정제
-  var companyList [][]string
-  for _, company := range md.ShowAllCompany(db) {
-    var tempList []string
-    tempList = append(tempList, company.Name)
-    tempList = append(tempList, company.Description)
-    companyList = append(companyList, tempList)
-  }
-
-  //runRouter(companyList)
+// Claims for JWT login
+type Claims struct {
+  ID string
+  PW string
+  jwt.StandardClaims
 }
 
-func runRouter(companyList [][]string) {
-  router := gin.Default()
+// JwtKey is JWT Key
+var JwtKey = []byte("JWT_SECRET_KEY")
+var expirationTime = 5 * time.Minute
+
+// GetJwtToken gets JWT Token
+func (user *Claims) GetJwtToken() (string, error) {
+  expirationTime := time.Now().Add(expirationTime)
+  claims := &Claims{
+    ID: user.ID,
+    PW: user.PW,
+    StandardClaims: jwt.StandardClaims{
+      ExpiresAt: expirationTime.Unix(),
+    },
+  }
+
+  token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+  tokenString, err := token.SignedString(JwtKey)
+
+  if err != nil {
+    return "", fmt.Errorf("token signed Error")
+  }
+  
+  return tokenString, nil
+}
+
+func main() {
+  db := stock.ConnectToDB(stock.MySQLInfo)
+  defer db.Close()
+  stock.CheckErr(db.Ping())
+
+  runRouter(db)
+}
+
+func runRouter(dbInfo *sql.DB) {
+  var router *gin.Engine
+  router = gin.Default()
   router.LoadHTMLGlob("templates/*")
-  
-	router.GET("/", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "home.html", gin.H{
-      "title": "GoStock",
-      "companyList": companyList,
-		})
+
+  router.GET("/", func(c *gin.Context) {
+    c.HTML(http.StatusOK, "index.html", gin.H{})
   })
-  
-  router.GET("/chart", func(c *gin.Context) {
-    var nameItems []string;
-    var valueItems []int;
 
-    nameItems = append(nameItems, "A")
-    nameItems = append(nameItems, "C")
-    nameItems = append(nameItems, "B")
+  router.POST("/login", func(c *gin.Context) {
+    id := c.Query("id")
+    pw := c.Query("pw")
 
-    valueItems = append(valueItems, rand.Intn(100))
-    valueItems = append(valueItems, rand.Intn(100))
-    valueItems = append(valueItems, rand.Intn(100))
+    query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s' AND pw='%s'",
+    id, stock.HashPW(pw))
+    rows, err := dbInfo.Query(query)
+    stock.CheckErr(err)
 
-    line := charts.NewLine()
-    line.SetGlobalOptions(charts.TitleOpts{Title: "주식 차트"})
-    line.AddXAxis(nameItems).
-    AddYAxis("민준전자", valueItems, charts.LineOpts{Smooth: true}).
-    AddYAxis("민준농업", valueItems, charts.LineOpts{Smooth: true})
+    if stock.CountRows(rows) > 0 {   
+      user := Claims{ID: id, PW: pw}
+      jwtToken, err := user.GetJwtToken()
+      stock.CheckErr(err)
 
-    f, err := os.Create("./templates/chart.html")
-    md.CheckErr(err)
-    line.Render(f)
+      c.Header("Cache-Control", "no-store, no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0")
+      c.Header("Last-Modified", time.Now().String())
+      c.Header("Pragma", "no-cache")
+      c.SetCookie("access-token", jwtToken, 1800, "", "", false, false)
 
-		c.HTML(http.StatusOK, "chart.html", gin.H{})
+      c.JSON(http.StatusOK, gin.H{"status": http.StatusOK})
+      color.Green("[로그인] ID: " + id)
+    } else {
+      c.JSON(http.StatusOK, gin.H{"status": http.StatusUnauthorized, "error": "Authentication failed"})
+      color.Red("잘못된 ID 또는 PW입니다")
+    }
   })
-  
+
   router.Run(":8080")
 }
