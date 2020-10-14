@@ -42,6 +42,7 @@ type CompanyStock struct {
 type MyStock struct {
   Name    string
   Number  int
+  Profit   int
 }
 
 // UserInfo is user info
@@ -141,7 +142,6 @@ func Register(dbInfo *sql.DB, userInfo UserInfo) {
   if CountRows(rows) == 0 {
     query := fmt.Sprintf("INSERT INTO public.user (id, pw, name, money, register_date) VALUES('%s', '%s', '%s', %d, '%s')",
     userInfo.ID, userInfo.PW, userInfo.Name, 50000, getNowTime())
-    fmt.Println(query)
     _, err2 := dbInfo.Exec(query)
     CheckErr(err2)
 
@@ -388,19 +388,21 @@ func SellStock(dbInfo *sql.DB, stockToSell MyStock, userInfo UserInfo) {
 
 // InquiryMyStocks : 보유 주식 전부 조회
 func InquiryMyStocks(dbInfo *sql.DB, userInfo UserInfo) []MyStock {
-  query := fmt.Sprintf("SELECT company_name, number FROM public.stocks WHERE trader_id='%s'", userInfo.ID)
+  query := fmt.Sprintf("SELECT company_name, number, traded_value FROM public.stocks WHERE trader_id='%s'", userInfo.ID)
   rows, err := dbInfo.Query(query)
   CheckErr(err)
   
   var myStocksName []string
   var myStocksCnt []int
+  var myStocksProfit []int
 
-  for rows.Next() { // row
+  for rows.Next() {
     // 값 받기
     var stockCompany string
-    var stockCnt, blockAddress int
+    var stockCnt, tradedValue, blockAddress int
     isBought := false
-    err := rows.Scan(&stockCompany, &stockCnt)
+
+    err := rows.Scan(&stockCompany, &stockCnt, &tradedValue)
     CheckErr(err)
 
     for i, v := range myStocksName {
@@ -411,10 +413,14 @@ func InquiryMyStocks(dbInfo *sql.DB, userInfo UserInfo) []MyStock {
       }
     }
 
+    nowStockValue := ShowCompany(dbInfo, stockCompany).StockValue
+
     if isBought {
       // 해당 칸에 구매한 만큼 추가
       myStocksCnt[blockAddress] += stockCnt
+      myStocksProfit[blockAddress] += (nowStockValue - tradedValue) * stockCnt
     } else {
+      myStocksProfit = append(myStocksProfit, (nowStockValue - tradedValue) * stockCnt)
       myStocksName = append(myStocksName, stockCompany)
       myStocksCnt = append(myStocksCnt, stockCnt)
     }
@@ -425,10 +431,28 @@ func InquiryMyStocks(dbInfo *sql.DB, userInfo UserInfo) []MyStock {
     var myStock MyStock
     myStock.Name = stockName
     myStock.Number = myStocksCnt[j]
+    myStock.Profit = myStocksProfit[j]
     myStocks = append(myStocks, myStock)
   }
 
   return myStocks
+}
+
+// ShowProfitTable shows profit table
+func ShowProfitTable(dbInfo *sql.DB, myStocks []MyStock) {
+  color.Yellow(fmt.Sprintf("===============[%s]===============", "보유 주식 현황"))
+  for _, myStock := range(myStocks) {
+    text := fmt.Sprintf("[%s]  %d개  %s원  ",
+    myStock.Name, myStock.Number, FormatNumbers(ShowCompany(dbInfo, myStock.Name).StockValue))
+    fmt.Print(text)
+    if myStock.Profit < 0 {
+      color.Red("▼ " + FormatNumbers(myStock.Profit) + "원")
+    } else if myStock.Profit > 0 {
+      color.Green("▲ " + FormatNumbers(myStock.Profit) + "원")
+    } else {
+      fmt.Println("- " + FormatNumbers(myStock.Profit) + "원")
+    }
+  }
 }
 
 // ShowCompany shows company from DB
