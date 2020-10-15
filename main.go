@@ -82,15 +82,20 @@ func runRouter(dbInfo *sql.DB) {
   router.LoadHTMLGlob("templates/*")
   router.Use(location.Default())
 
+  router.NoRoute(func(c *gin.Context) {
+    c.String(http.StatusNotFound, "404 page not found")
+  })
+
   router.GET("/", func(c *gin.Context) {
     _, isSubdomain := checkSubdomain(location.Get(c))
     if !isSubdomain {
       c.HTML(http.StatusOK, "index.html", gin.H{})
     } else {
-      c.JSON(http.StatusNotFound, gin.H{"status": http.StatusNotFound, "error": "Not Found"})
+      c.String(http.StatusNotFound, "404 page not found")
     }
   })
 
+  // APIS
   router.POST("/auth", func(c *gin.Context) {
     subdomain, _ := checkSubdomain(location.Get(c))
 

@@ -1,10 +1,10 @@
 package module
 
 import (
-	"strconv"
   "os"
   "fmt"
   "time"
+  "strconv"
   "crypto/sha256"
   "encoding/hex"
   "math/rand"
@@ -12,11 +12,11 @@ import (
   "github.com/fatih/color"
   "github.com/dgrijalva/jwt-go"
 
-  // Library for DB
+  // PostgreSQL 라이브러리
   _ "github.com/lib/pq"
 )
 
-// SQLInfo is info for connecting to DB
+// SQLInfo - DB 연결 시 정보
 type SQLInfo struct {
   Host      string
   Port      int
@@ -25,28 +25,7 @@ type SQLInfo struct {
   Dbname    string
 }
 
-// Company Struct
-type Company struct {
-  Seq         int
-  Name        string
-  Description string
-  StockValue  int
-}
-
-// CompanyStock is struct of a company's stock
-type CompanyStock struct {
-	Name	      string
-	StockValue	int
-}
-
-// MyStock is struct of my stock
-type MyStock struct {
-  Name    string
-  Number  int
-  Profit   int
-}
-
-// UserInfo is user info
+// UserInfo - 로그인 시 사용자 정보
 type UserInfo struct {
   ID    string
   PW    string
@@ -55,27 +34,46 @@ type UserInfo struct {
   jwt.StandardClaims
 }
 
-// MySQLInfo is my sql info
+// Company - 주식회사 정보
+type Company struct {
+  Seq         int
+  Name        string
+  Description string
+  StockValue  int
+}
+
+// CompanyStock - 주식 정보
+type CompanyStock struct {
+	Name	      string
+	StockValue	int
+}
+
+// MyStock - 보유 주식 정보
+type MyStock struct {
+  Name    string
+  Number  int
+  Profit   int
+}
+
+// MySQLInfo - DB 접속 위한 정보
 var MySQLInfo = SQLInfo {
 	Host: "localhost",
 	Port: 5432,
 	User: "postgres",
 	Password: "비밀",
-  Dbname: "goStock"}
-  
-// NowLoginInfo : 현재 로그인 정보
-var NowLoginInfo UserInfo
+  Dbname: "goStock",
+}
 
-// CheckErr checks error
+// CheckErr - 에러 체크
 func CheckErr (err error) {
   if err != nil {
     panic(err)
   }
 }
 
-// Init ticker: loops
+// Init - 5분마다 주식 가격 변경
 func Init(sc chan os.Signal, dbInfo *sql.DB) {
-	ticker := time.NewTicker(1 * time.Minute) // 1분에 한 번씩
+	ticker := time.NewTicker(5 * time.Minute)
 	go func() {
 		for {
 			select {
@@ -89,7 +87,7 @@ func Init(sc chan os.Signal, dbInfo *sql.DB) {
 	}()
 }
 
-// FormatNumbers formats number with commas
+// FormatNumbers - 숫자 천단위 쉼표 포맷팅
 func FormatNumbers(n int) string {
 	in := strconv.FormatInt(int64(n), 10)
 	numOfDigits := len(in)
@@ -115,7 +113,7 @@ func FormatNumbers(n int) string {
 	}
 }
 
-// ConnectToDB connects to db
+// ConnectToDB - DB 연결
 func ConnectToDB(sqlInfo SQLInfo) *sql.DB {
   db, err := sql.Open("postgres",
   fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
@@ -126,7 +124,7 @@ func ConnectToDB(sqlInfo SQLInfo) *sql.DB {
   return db
 }
 
-// HashPW hash PW
+// HashPW - SHA256으로 암호화
 func HashPW(pw string) string {
   hash := sha256.New()
   hash.Write([]byte(pw))
@@ -135,7 +133,7 @@ func HashPW(pw string) string {
   return hashPW
 }
 
-// Register is for registering
+// Register - 회원가입
 func Register(dbInfo *sql.DB, userInfo UserInfo) {
   userInfo.PW = HashPW(userInfo.PW)
 
@@ -155,7 +153,7 @@ func Register(dbInfo *sql.DB, userInfo UserInfo) {
   }
 }
 
-// Login is for logining
+// Login - 로그인
 func Login(dbInfo *sql.DB, userInfo UserInfo) {
   query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s' AND pw='%s'",
   userInfo.ID, HashPW(userInfo.PW))
@@ -163,7 +161,7 @@ func Login(dbInfo *sql.DB, userInfo UserInfo) {
   CheckErr(err)
 
   if CountRows(rows) > 0 {
-    NowLoginInfo = GetUserInfo(dbInfo, userInfo.ID)
+    NowLoginInfo := GetUserInfo(dbInfo, userInfo.ID)
     
     text := fmt.Sprintf("성공적으로 로그인하였습니다: %s(%s)", NowLoginInfo.Name, NowLoginInfo.ID)
     color.Green(text)
@@ -172,7 +170,7 @@ func Login(dbInfo *sql.DB, userInfo UserInfo) {
   }
 }
 
-// GetUserInfo gets user info
+// GetUserInfo - 사용자 정보 불러오기
 func GetUserInfo(dbInfo *sql.DB, userID string) UserInfo {
   rows, err := dbInfo.Query(fmt.Sprintf("SELECT id, name, money FROM public.user WHERE id='%s'", userID))
   CheckErr(err)
@@ -187,7 +185,7 @@ func GetUserInfo(dbInfo *sql.DB, userID string) UserInfo {
   return result
 }
 
-// AddCompany adds company
+// AddCompany - 회사 상장
 func AddCompany(dbInfo *sql.DB, companyInfo Company, initialPrice int) {
   rows, err := dbInfo.Query("SELECT COUNT(*) as count FROM company WHERE name='" + companyInfo.Name + "'")
   CheckErr(err)
@@ -217,7 +215,7 @@ func AddCompany(dbInfo *sql.DB, companyInfo Company, initialPrice int) {
   }
 }
 
-// BankruptCompany bankrupts company
+// BankruptCompany - 회사 파산
 func BankruptCompany(dbInfo *sql.DB, companyName string) {
   rows, err := dbInfo.Query("SELECT COUNT(*) as count FROM company WHERE name='" + companyName + "'")
   CheckErr(err)
@@ -241,7 +239,7 @@ func getNowTime() string {
   return result
 }
 
-// CountRows counts rows
+// CountRows - 결과 개수 조회
 func CountRows(rows *sql.Rows) (count int) {
   for rows.Next() {
     err := rows.Scan(&count)
@@ -251,7 +249,7 @@ func CountRows(rows *sql.Rows) (count int) {
   return count
 }
 
-// SetStockInfo sets stock value
+// SetStockInfo - 주식 가격 설정
 func SetStockInfo(dbInfo *sql.DB, stockInfo CompanyStock) {
   rows, err := dbInfo.Query("SELECT COUNT(*) as count FROM company WHERE name='" + stockInfo.Name + "'")
   CheckErr(err)
@@ -269,7 +267,7 @@ func SetStockInfo(dbInfo *sql.DB, stockInfo CompanyStock) {
   }
 }
 
-// GetRandomStockValue gets random stock value (0.5 ~ 2)
+// GetRandomStockValue - 주식의 가격을 랜덤으로 정함
 func GetRandomStockValue(stockValue int) int {
   rand.Seed(time.Now().UnixNano())
   min := int(stockValue / 2)
@@ -278,7 +276,7 @@ func GetRandomStockValue(stockValue int) int {
   return result
 }
 
-// ResetStockValues re-set stock values
+// ResetStockValues - 모든 회사들의 주식 가격을 변경
 func ResetStockValues(dbInfo *sql.DB) {
   color.Yellow(fmt.Sprintf("=====[%s]=====", getNowTime()))
   for _, company := range ShowAllCompany(dbInfo) {
@@ -301,7 +299,7 @@ func ResetStockValues(dbInfo *sql.DB) {
   }
 }
 
-// PurchaseStock : 주식 구매
+// PurchaseStock - 주식 구매
 func PurchaseStock(dbInfo *sql.DB, companyName string, number int, trader UserInfo) {
   company := ShowCompany(dbInfo, companyName)
   ownedMoney := GetUserInfo(dbInfo, trader.ID).Money
@@ -328,7 +326,7 @@ func PurchaseStock(dbInfo *sql.DB, companyName string, number int, trader UserIn
   }
 }
 
-// SellStock : 주식 판매
+// SellStock - 주식 판매
 func SellStock(dbInfo *sql.DB, stockToSell MyStock, userInfo UserInfo) {
   query := fmt.Sprintf("SELECT seq, company_name, number, traded_value, trader_id FROM stocks WHERE company_name='%s' AND trader_id='%s'", stockToSell.Name, userInfo.ID)
   rows, err := dbInfo.Query(query)
@@ -389,7 +387,7 @@ func SellStock(dbInfo *sql.DB, stockToSell MyStock, userInfo UserInfo) {
   }
 }
 
-// InquiryMyStocks : 보유 주식 전부 조회
+// InquiryMyStocks - 보유 주식 전부 조회
 func InquiryMyStocks(dbInfo *sql.DB, userInfo UserInfo) []MyStock {
   query := fmt.Sprintf("SELECT company_name, number, traded_value FROM public.stocks WHERE trader_id='%s'", userInfo.ID)
   rows, err := dbInfo.Query(query)
@@ -441,7 +439,7 @@ func InquiryMyStocks(dbInfo *sql.DB, userInfo UserInfo) []MyStock {
   return myStocks
 }
 
-// ShowProfitTable shows profit table
+// ShowProfitTable - 현재 이익 전부 보여줌
 func ShowProfitTable(dbInfo *sql.DB, myStocks []MyStock) {
   color.Yellow(fmt.Sprintf("===============[%s]===============", "보유 주식 현황"))
   for _, myStock := range(myStocks) {
@@ -458,7 +456,7 @@ func ShowProfitTable(dbInfo *sql.DB, myStocks []MyStock) {
   }
 }
 
-// ShowCompany shows company from DB
+// ShowCompany - 해당 회사의 정보를 보여줌
 func ShowCompany(dbInfo *sql.DB, companyName string) Company {
   rows, err := dbInfo.Query(fmt.Sprintf("SELECT * FROM company WHERE name='%s'", companyName))
   CheckErr(err)
@@ -485,7 +483,7 @@ func ShowCompany(dbInfo *sql.DB, companyName string) Company {
   return result
 }
 
-// ShowAllCompany shows all company from DB
+// ShowAllCompany - 모든 회사의 정보를 보여줌
 func ShowAllCompany(dbInfo *sql.DB) []Company {
   rows, err := dbInfo.Query("SELECT * FROM company")
   CheckErr(err)
@@ -512,7 +510,7 @@ func ShowAllCompany(dbInfo *sql.DB) []Company {
   return companyList
 }
 
-// GetCompanyNameList returns companyNameList
+// GetCompanyNameList - 회사 이름 리스트를 반환
 func GetCompanyNameList(dbInfo *sql.DB) (companyNameList []string) {
   for _, company := range ShowAllCompany(dbInfo) {
     companyNameList = append(companyNameList, company.Name)
