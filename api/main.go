@@ -68,6 +68,7 @@ func main() {
 	CheckErr(db.Ping())
 	defer db.Close()
 	
+	// v1/auth => LOGIN
   	r.POST("v1/auth/", func(c *gin.Context) {
 		auth := c.Request.Header["Authorization"][0]
 		inp := AuthInp{}
@@ -92,8 +93,6 @@ func main() {
 		inp.ID, hashPW)
 		rows, err := db.Query(query)
 		CheckErr(err)
-
-		fmt.Println(inp.ID, inp.PW)
 		  
 		if CountRows(rows) == 1 {
 			query := fmt.Sprintf("SELECT id, name FROM public.user WHERE id='%s'", inp.ID)
@@ -107,21 +106,25 @@ func main() {
 				CheckErr(err)
 			}
 			
-			oup = AuthOup{
-				StandardClaims: jwt.StandardClaims{
-					IssuedAt: iat,
-					ExpiresAt: exp,
-				},
+			oup.StandardClaims = jwt.StandardClaims {
+				IssuedAt: iat,
+				ExpiresAt: exp,
 			}
+
+			// JWT 설정
+			token := jwt.NewWithClaims(jwt.SigningMethodHS256, oup)
+			JwtKey := []byte("JWT_SECRET_KEY")
+			tokenString, err := token.SignedString(JwtKey)
+			CheckErr(err)
 
 			c.JSON(200, gin.H{
 				"status": http.StatusOK,
-				"identity": oup,
+				"access_token": tokenString,
 			})
 		} else {
 			c.JSON(401, gin.H{
 				"status": http.StatusUnauthorized,
-				"error": "Login Failed",
+				"message": "Login Failed",
 			})
 		}
 	})
