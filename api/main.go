@@ -19,13 +19,14 @@ import (
 	_ "github.com/lib/pq"
 )
 
-// AuthInp - Auth/logim API 입력 값
+// AuthInp - Auth API 입력 값
 type AuthInp struct {
 	ID	string
 	PW	string
+	Name string
 }
 
-// AuthOup - Auth/login API 반환 값
+// AuthOup - Auth API 반환 값
 type AuthOup struct {
 	ID		string
 	Name	string
@@ -51,6 +52,18 @@ func main() {
 	var r *gin.Engine
 	r = gin.Default()
 
+	//r.LoadHTMLGlob("templates/*")
+	r.Use(location.Default())
+	r.Use(MiddleWare)
+
+	// 405 SET
+	r.NoMethod(func(c *gin.Context) {
+		c.JSON(405, gin.H{
+			"status": http.StatusMethodNotAllowed,
+			"message": "This Method's Not Supported",
+		})
+	})
+
 	// 404 SET
 	r.NoRoute(func(c *gin.Context) {
 		c.JSON(404, gin.H{
@@ -58,10 +71,6 @@ func main() {
 			"message": "Page Not Found",
 		})
 	})
-
-	//r.LoadHTMLGlob("templates/*")
-	r.Use(location.Default())
-	r.Use(MiddleWare)
 
 	db := ConnectToDB()
 	CheckErr(db.Ping())
@@ -76,23 +85,32 @@ func main() {
 			json.Unmarshal([]byte(auth), &inp)
 
 			// DB 처리
-			query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s'", inp.ID)
+			query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s' OR name='%s'", inp.ID, inp.Name)
 			rows, err := db.Query(query)
 			CheckErr(err)
 			
 			if CountRows(rows) == 0 {
-				//query := fmt.Sprintf("INSERT INTO public.user() VALUES()")
-				//_, err := db.Query(query)
-				//CheckErr(err)
+				if inp.ID != "" && inp.PW != "" && inp.Name != "" {
+					t := time.Now()
+					query := fmt.Sprintf("INSERT INTO public.user(id, pw, name, money, register_date) VALUES('%s', '%s', '%s', %d, '%d%d%d%d%d')",
+					inp.ID, inp.PW, inp.Name, 50000, t.Year(), int(t.Month()), t.Day(), t.Hour(), t.Minute())
+					_, err := db.Query(query)
+					CheckErr(err)
 
-				c.JSON(201, gin.H{
-					"status": http.StatusCreated,
-					"message": "Successfully Created",
-				})
+					c.JSON(201, gin.H{
+						"status": http.StatusCreated,
+						"message": "Successfully Created",
+					})
+				} else {
+					c.JSON(400, gin.H{
+						"status": http.StatusBadRequest,
+						"message": "ID, PW, Name Needed. But something's missing",
+					})
+				}
 			} else {
 				c.JSON(409, gin.H{
 					"status": http.StatusConflict,
-					"message": "Already Exists",
+					"message": "Already Exists. ID and Name should not be overlapped",
 				})
 			}
 		}
@@ -165,7 +183,7 @@ func main() {
 		}
 	})
 	
-  	r.Run(":8081") // listen and serve on 0.0.0.0:8080
+  	r.Run(":8081")
 }
 
 // CheckErr - 에러 체크
