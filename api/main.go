@@ -33,6 +33,14 @@ type AuthOup struct {
 	jwt.StandardClaims
 }
 
+// Company - 회사 API 반환 값
+type Company struct {
+	Seq         int
+	Name        string
+	Description string
+	StockValue  int
+}
+
 var domain = "api.localhost:8081"
 
 // MiddleWare - 미들웨어
@@ -81,37 +89,44 @@ func main() {
 		if CheckSubdomain(location.Get(c), "api") {
 			var inp AuthInp
 
-			auth := c.Request.Header["Authentication"][0]
-			json.Unmarshal([]byte(auth), &inp)
+			if len(c.Request.Header["Authentication"]) == 0 {
+				c.JSON(400 , gin.H{
+					"status": http.StatusBadRequest,
+					"message": "Authentication Needed. But missing.",
+				})
+			} else {
+				auth := c.Request.Header["Authentication"][0]
+				json.Unmarshal([]byte(auth), &inp)
 
-			// DB 처리
-			query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s' OR name='%s'", inp.ID, inp.Name)
-			rows, err := db.Query(query)
-			CheckErr(err)
-			
-			if CountRows(rows) == 0 {
-				if inp.ID != "" && inp.PW != "" && inp.Name != "" {
-					t := time.Now()
-					query := fmt.Sprintf("INSERT INTO public.user(id, pw, name, money, register_date) VALUES('%s', '%s', '%s', %d, '%d%d%d%d%d')",
-					inp.ID, inp.PW, inp.Name, 50000, t.Year(), int(t.Month()), t.Day(), t.Hour(), t.Minute())
-					_, err := db.Query(query)
-					CheckErr(err)
+				// DB 처리
+				query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s' OR name='%s'", inp.ID, inp.Name)
+				rows, err := db.Query(query)
+				CheckErr(err)
+				
+				if CountRows(rows) == 0 {
+					if inp.ID != "" && inp.PW != "" && inp.Name != "" {
+						t := time.Now()
+						query := fmt.Sprintf("INSERT INTO public.user(id, pw, name, money, register_date) VALUES('%s', '%s', '%s', %d, '%d%d%d%d%d')",
+						inp.ID, inp.PW, inp.Name, 50000, t.Year(), int(t.Month()), t.Day(), t.Hour(), t.Minute())
+						_, err := db.Query(query)
+						CheckErr(err)
 
-					c.JSON(201, gin.H{
-						"status": http.StatusCreated,
-						"message": "Successfully Created",
-					})
+						c.JSON(201, gin.H{
+							"status": http.StatusCreated,
+							"message": "Successfully Created",
+						})
+					} else {
+						c.JSON(400, gin.H{
+							"status": http.StatusBadRequest,
+							"message": "ID, PW, Name Needed. But something's missing",
+						})
+					}
 				} else {
-					c.JSON(400, gin.H{
-						"status": http.StatusBadRequest,
-						"message": "ID, PW, Name Needed. But something's missing",
+					c.JSON(409, gin.H{
+						"status": http.StatusConflict,
+						"message": "Already Exists. ID and Name should not be overlapped",
 					})
 				}
-			} else {
-				c.JSON(409, gin.H{
-					"status": http.StatusConflict,
-					"message": "Already Exists. ID and Name should not be overlapped",
-				})
 			}
 		}
 	})
@@ -122,63 +137,124 @@ func main() {
 			var inp AuthInp
 			var oup AuthOup
 
-			auth := c.Request.Header["Authentication"][0]
-			json.Unmarshal([]byte(auth), &inp)
-			
-			// 시간 설정
-			iat, exp := setIatExp()
+			if len(c.Request.Header["Authentication"]) == 0 {
+				c.JSON(400 , gin.H{
+					"status": http.StatusBadRequest,
+					"message": "Authentication Needed. But missing.",
+				})
+			} else {
+				auth := c.Request.Header["Authentication"][0]
+				json.Unmarshal([]byte(auth), &inp)
+				
+				// 시간 설정
+				iat, exp := setIatExp()
 
-			// PW 암호화
-			hash := sha256.New()
-			hash.Write([]byte(inp.PW))
-			hashPW := hex.EncodeToString(hash.Sum(nil))
+				// PW 암호화
+				hash := sha256.New()
+				hash.Write([]byte(inp.PW))
+				hashPW := hex.EncodeToString(hash.Sum(nil))
 
-			// DB 처리
-			query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s' AND pw='%s'",
-			inp.ID, hashPW)
-			rows, err := db.Query(query)
-			CheckErr(err)
-			
-			if CountRows(rows) == 1 {
-				query := fmt.Sprintf("SELECT id, name FROM public.user WHERE id='%s'", inp.ID)
+				// DB 처리
+				query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s' AND pw='%s'",
+				inp.ID, hashPW)
 				rows, err := db.Query(query)
 				CheckErr(err)
-
-				for rows.Next() {
-					err := rows.Scan(&oup.ID, &oup.Name)
-					CheckErr(err)
-				}
 				
-				oup.StandardClaims = jwt.StandardClaims {
-					Audience: GetIP(),
-					Issuer: domain,
-					IssuedAt: iat,
-					ExpiresAt: exp,
+				if CountRows(rows) == 1 {
+					query := fmt.Sprintf("SELECT id, name FROM public.user WHERE id='%s'", inp.ID)
+					rows, err := db.Query(query)
+					CheckErr(err)
+
+					for rows.Next() {
+						err := rows.Scan(&oup.ID, &oup.Name)
+						CheckErr(err)
+					}
+					
+					oup.StandardClaims = jwt.StandardClaims {
+						Audience: GetIP(),
+						Issuer: domain,
+						IssuedAt: iat,
+						ExpiresAt: exp,
+					}
+
+					// JWT 설정
+					token := jwt.NewWithClaims(jwt.SigningMethodHS256, oup)
+					JwtKey := []byte("JWT_SECRET_KEY")
+					tokenString, err := token.SignedString(JwtKey)
+					CheckErr(err)
+
+					c.JSON(200, gin.H{
+						"status": http.StatusOK,
+						"access_token": tokenString,
+					})
+
+					// 쿠키
+					//c.SetCookie("access_token", tokenString, 1800, "", "", false, false)
+				} else {
+					c.JSON(401, gin.H{
+						"status": http.StatusUnauthorized,
+						"message": "Login Failed",
+					})
 				}
-
-				// JWT 설정
-				token := jwt.NewWithClaims(jwt.SigningMethodHS256, oup)
-				JwtKey := []byte("JWT_SECRET_KEY")
-				tokenString, err := token.SignedString(JwtKey)
-				CheckErr(err)
-
-				c.JSON(200, gin.H{
-					"status": http.StatusOK,
-					"access_token": tokenString,
-				})
-
-				// 쿠키
-				//c.SetCookie("access_token", tokenString, 1800, "", "", false, false)
-			} else {
-				c.JSON(401, gin.H{
-					"status": http.StatusUnauthorized,
-					"message": "Login Failed",
-				})
 			}
 		} else {
 			c.JSON(404, gin.H{
 				"status": http.StatusNotFound,
 				"message": "Page Not Found",
+			})
+		}
+	})
+
+	// Company 조회
+	r.GET("/v1/company", func(c *gin.Context) {
+		var oup AuthOup
+
+		if len(c.Request.Header["Authorization"]) == 0 {
+			c.JSON(400 , gin.H{
+				"status": http.StatusBadRequest,
+				"message": "Authorization Needed. But missing.",
+			})
+		} else {
+			auth := c.Request.Header["Authorization"][0]
+			json.Unmarshal([]byte(auth), &oup)
+
+			/*
+				ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ
+				|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|
+				|#################### [[JWT 토큰 유효성 확인 해야함]] ####################|
+				|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|
+				ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ
+			*/
+
+			fmt.Println(oup)
+
+			// DB 처리
+			query := fmt.Sprintf("SELECT seq, name, description FROM public.company")
+			rows, err := db.Query(query)
+			CheckErr(err)
+
+			var companyList = []Company{}
+
+			for rows.Next() {
+				var c Company
+				errScan := rows.Scan(&c.Seq, &c.Name, &c.Description)
+				CheckErr(errScan)
+
+				query2 := fmt.Sprintf("SELECT value FROM %s ORDER BY seq DESC LIMIT 1", c.Name)
+				rows2, err2 := db.Query(query2)
+				CheckErr(err2)
+
+				for rows2.Next() {
+					errScan2 := rows2.Scan(&c.StockValue)
+					CheckErr(errScan2)
+				}
+
+				companyList = append(companyList, c)
+			}
+
+			c.JSON(http.StatusOK, gin.H{
+				"status": http.StatusOK,
+				"message": companyList,
 			})
 		}
 	})
