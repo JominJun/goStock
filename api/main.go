@@ -84,6 +84,8 @@ func main() {
 	CheckErr(db.Ping())
 	defer db.Close()
 
+	JwtKey := []byte("JWT_SECRET_KEY")
+
 	// v1/auth/register => REGISTER
 	r.POST("v1/auth/register", func(c *gin.Context) {
 		if CheckSubdomain(location.Get(c), "api") {
@@ -179,7 +181,6 @@ func main() {
 
 					// JWT 설정
 					token := jwt.NewWithClaims(jwt.SigningMethodHS256, oup)
-					JwtKey := []byte("JWT_SECRET_KEY")
 					tokenString, err := token.SignedString(JwtKey)
 					CheckErr(err)
 
@@ -207,8 +208,6 @@ func main() {
 
 	// Company 조회
 	r.GET("/v1/company", func(c *gin.Context) {
-		var oup AuthOup
-
 		if len(c.Request.Header["Authorization"]) == 0 {
 			c.JSON(400 , gin.H{
 				"status": http.StatusBadRequest,
@@ -216,7 +215,24 @@ func main() {
 			})
 		} else {
 			auth := c.Request.Header["Authorization"][0]
-			json.Unmarshal([]byte(auth), &oup)
+			fmt.Println(auth)
+
+			claims := jwt.MapClaims{}
+			_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
+				return JwtKey, nil
+			})
+
+			CheckErr(err)
+
+			oup := AuthOup{}
+			for key, val := range claims {
+				// 이거 하고 싶은데 왜 안되냐구
+				// 내일 해결하자
+				oup.key = val
+				fmt.Printf("Key: %v, value: %v\n", key, val)
+			}
+
+			fmt.Println(oup)
 
 			/*
 				ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ
@@ -225,8 +241,6 @@ func main() {
 				|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|
 				ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ
 			*/
-
-			fmt.Println(oup)
 
 			// DB 처리
 			query := fmt.Sprintf("SELECT seq, name, description FROM public.company")
