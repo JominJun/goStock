@@ -215,61 +215,75 @@ func main() {
 			})
 		} else {
 			auth := c.Request.Header["Authorization"][0]
-			fmt.Println(auth)
 
 			claims := jwt.MapClaims{}
 			_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
 				return JwtKey, nil
 			})
 
-			CheckErr(err)
+			if err != nil {
+				if err == jwt.ErrSignatureInvalid {
+					c.JSON(401, gin.H{
+						"status": http.StatusUnauthorized,
+						"message": "Token is Expired.",
+					})
+				} else {
+					c.JSON(403, gin.H{
+						"status": http.StatusForbidden,
+						"message": "Forbidden. Token is invalid.",
+					})
+				}
+			} else {
+				isValid := false
 
-			oup := AuthOup{}
-			for key, val := range claims {
-				// 이거 하고 싶은데 왜 안되냐구
-				// 내일 해결하자
-				oup.key = val
-				fmt.Printf("Key: %v, value: %v\n", key, val)
-			}
+				for key, val := range claims {
+					if key == "ID" {
+						query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s'", val)
+						rows, err := db.Query(query)
+						CheckErr(err)
 
-			fmt.Println(oup)
-
-			/*
-				ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ
-				|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|
-				|#################### [[JWT 토큰 유효성 확인 해야함]] ####################|
-				|~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|
-				ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ
-			*/
-
-			// DB 처리
-			query := fmt.Sprintf("SELECT seq, name, description FROM public.company")
-			rows, err := db.Query(query)
-			CheckErr(err)
-
-			var companyList = []Company{}
-
-			for rows.Next() {
-				var c Company
-				errScan := rows.Scan(&c.Seq, &c.Name, &c.Description)
-				CheckErr(errScan)
-
-				query2 := fmt.Sprintf("SELECT value FROM %s ORDER BY seq DESC LIMIT 1", c.Name)
-				rows2, err2 := db.Query(query2)
-				CheckErr(err2)
-
-				for rows2.Next() {
-					errScan2 := rows2.Scan(&c.StockValue)
-					CheckErr(errScan2)
+						if CountRows(rows) == 1 {
+							isValid = true
+						}
+					}
 				}
 
-				companyList = append(companyList, c)
-			}
+				if isValid {
+					// DB 처리
+					query := fmt.Sprintf("SELECT seq, name, description FROM public.company")
+					rows, err := db.Query(query)
+					CheckErr(err)
 
-			c.JSON(http.StatusOK, gin.H{
-				"status": http.StatusOK,
-				"message": companyList,
-			})
+					var companyList = []Company{}
+
+					for rows.Next() {
+						var c Company
+						errScan := rows.Scan(&c.Seq, &c.Name, &c.Description)
+						CheckErr(errScan)
+
+						query2 := fmt.Sprintf("SELECT value FROM %s ORDER BY seq DESC LIMIT 1", c.Name)
+						rows2, err2 := db.Query(query2)
+						CheckErr(err2)
+
+						for rows2.Next() {
+							errScan2 := rows2.Scan(&c.StockValue)
+							CheckErr(errScan2)
+						}
+
+						companyList = append(companyList, c)
+					}
+
+					c.JSON(http.StatusOK, gin.H{
+						"status": http.StatusOK,
+						"message": companyList,
+					})
+				} else {
+					c.JSON(403, gin.H{
+						"status": http.StatusUnauthorized,
+						"message": "Forbidden. Token is invalid.",
+					})
+				}
+			}
 		}
 	})
 	
