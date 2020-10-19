@@ -374,6 +374,11 @@ func main() {
 								"message": "name, description needed. But something's missing.",
 							})
 						}
+					} else {
+						c.JSON(401, gin.H{
+							"status": http.StatusUnauthorized,
+							"message": "Admin Auth Needed.",
+						})
 					}
 				}
 			}
@@ -387,7 +392,87 @@ func main() {
 
 	// v1/company => Company 수정 [[ADMIN]]
 	r.PUT("/v1/company", func(c *gin.Context) {
+		if CheckSubdomain(location.Get(c), "api") {
+			if len(c.Request.Header["Authorization"]) == 0 {
+				c.JSON(400 , gin.H{
+					"status": http.StatusBadRequest,
+					"message": "Authorization Needed. But missing.",
+				})
+			} else {
+				auth := c.Request.Header["Authorization"][0]
 
+				claims := jwt.MapClaims{}
+				_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
+					return JwtKey, nil
+				})
+
+				if err != nil {
+					if err == jwt.ErrSignatureInvalid {
+						c.JSON(401, gin.H{
+							"status": http.StatusUnauthorized,
+							"message": "Token is Expired.",
+						})
+					} else {
+						c.JSON(403, gin.H{
+							"status": http.StatusForbidden,
+							"message": "Forbidden. Token is invalid.",
+						})
+					}
+				} else {
+					isAdmin := false
+
+					for key, val := range claims {
+						if key == "ID" {
+							query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s' AND is_admin=true", val)
+							rows, err := db.Query(query)
+							CheckErr(err)
+
+							if CountRows(rows) == 1 {
+								isAdmin = true
+							}
+						}
+					}
+
+					if isAdmin {
+						name := c.Query("name")
+						description := c.Query("description")
+
+						if name != "" && description != "" {
+							// DB 처리
+							query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.company WHERE name='%s'", name)
+							rows, err := db.Query(query)
+							CheckErr(err)
+
+							if CountRows(rows) == 1 {
+								query2 := fmt.Sprintf("UPDATE public.company SET description='%s' WHERE name='%s'", description, name)
+								_, err2 := db.Query(query2)
+								CheckErr(err2)
+
+								c.JSON(200, gin.H{
+									"status": http.StatusOK,
+									"message": "Successfully Modified.",
+								})
+							} else {
+								c.JSON(400, gin.H{
+									"status": http.StatusBadRequest,
+									"message": fmt.Sprintf("No Company Named '%s'", name),
+								})
+							}
+						} else {
+							c.JSON(400, gin.H{
+								"status": http.StatusBadRequest,
+								"message": "name, description needed. But something's missing.",
+							})
+						}
+					} else {
+						c.JSON(401, gin.H{
+							"status": http.StatusUnauthorized,
+							"message": "Admin Auth Needed.",
+						})
+					}
+				}
+			}
+		}
 	})
 
 	// v1/company => Company 파산 [[ADMIN]]
