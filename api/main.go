@@ -914,6 +914,155 @@ func main() {
 		}
 	})
 
+	// v1/stock => Stock 판매
+	r.DELETE("/v1/stocks/:name/:number", func(c *gin.Context) {
+		if CheckSubdomain(location.Get(c), "api") {
+			if len(c.Request.Header["Authorization"]) == 0 {
+				c.JSON(400 , gin.H{
+					"status": http.StatusBadRequest,
+					"message": "Authorization Needed. But missing.",
+				})
+			} else {
+				auth := c.Request.Header["Authorization"][0]
+
+				claims := jwt.MapClaims{}
+				_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
+					return JwtKey, nil
+				})
+
+				if err != nil {
+					c.JSON(401, gin.H{
+						"status": http.StatusUnauthorized,
+						"message": "Token is Expired.",
+					})
+				} else {
+					isValid := false
+					id := ""
+
+					for key, val := range claims {
+						if key == "ID" {
+							query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s'", val)
+							rows, err := db.Query(query)
+							CheckErr(err)
+
+							id = fmt.Sprintf("%s", val)
+
+							if CountRows(rows) == 1 {
+								isValid = true
+							}
+						}
+					}
+
+					if isValid {
+						name := c.Param("name")
+						number, errParam := strconv.Atoi(c.Param("number"))
+
+						if errParam != nil {
+							c.JSON(400, gin.H{
+								"status": http.StatusBadRequest,
+								"message": "number should be numbers.",
+							})
+						} else {
+							if name != "" && number != 0 {
+								query2 := fmt.Sprintf("SELECT number FROM public.stocks WHERE trader_id='%s' AND company_name='%s'", id, name)
+								rows2, err2 := db.Query(query2)
+								CheckErr(err2)
+
+								ownedStockCount := 0
+								forCnt := 0
+
+								for rows2.Next() {
+									rows2.Scan(&forCnt)
+									ownedStockCount += forCnt
+								}
+
+								if ownedStockCount >= number {
+									var tradedValueList []int
+									processedNumber := 0
+
+									for {
+										if processedNumber == number {
+											break
+										}
+
+										query3 := fmt.Sprintf("SELECT number, traded_value FROM public.stocks WHERE trader_id='%s' AND company_name='%s' ORDER BY seq DESC LIMIT 1", id, name)
+										rows3, err3 := db.Query(query3)
+										CheckErr(err3)
+
+										var n, tradedValue int
+
+										for rows3.Next() {
+											rows3.Scan(&n, &tradedValue)
+											tradedValueList = append(tradedValueList, tradedValue)
+											
+											if processedNumber + n > number {
+												query4 := fmt.Sprintf("UPDATE public.stocks SET number=number-%d WHERE ctid IN (SELECT ctid FROM public.stocks WHERE trader_id='%s' AND company_name='%s' ORDER BY seq DESC LIMIT 1)",
+												number-processedNumber, id, name)
+												_, err4 := db.Query(query4)
+												CheckErr(err4)
+
+												processedNumber = number
+
+												break
+											} else {
+												query4 := fmt.Sprintf("DELETE FROM public.stocks WHERE ctid IN (SELECT ctid FROM public.stocks WHERE trader_id='%s' AND company_name='%s' ORDER BY seq DESC LIMIT 1)",
+												id, name)
+												_, err4 := db.Query(query4)
+												CheckErr(err4)
+												
+												processedNumber += n
+											}
+										}
+									}
+
+									query5 := fmt.Sprintf("SELECT value FROM public.%s ORDER BY seq DESC LIMIT 1", name)
+									rows5, err5 := db.Query(query5)
+									CheckErr(err5)
+
+									var nowPrice int
+									var totalProfit int
+
+									for rows5.Next() {
+										rows5.Scan(&nowPrice)
+									}
+
+									for value := range(tradedValueList) {
+										totalProfit += nowPrice-value
+									}
+
+									query6 := fmt.Sprintf("UPDATE public.user SET money=money+%d WHERE id='%s'", totalProfit, id)
+									_, err6 := db.Query(query6)
+									CheckErr(err6)
+
+									c.JSON(200, gin.H{
+										"status": http.StatusOK,
+										"message": "Successfully Selled.",
+									})
+								} else {
+									c.JSON(400, gin.H{
+										"status": http.StatusBadRequest,
+										"message": "Does not have enough stocks to sell.",
+										"ownedStockCount": ownedStockCount,
+									})
+								}
+							} else {
+								c.JSON(400, gin.H{
+									"status": http.StatusBadRequest,
+									"message": "name, number Needed. But something's missing or zero.",
+								})
+							}
+						}
+					} else {
+						c.JSON(403, gin.H{
+							"status": http.StatusForbidden,
+							"message": "Forbidden. Token is invalid.",
+						})
+					}
+				}
+			}
+		}
+	})
+
   	r.Run(":8081")
 }
 
