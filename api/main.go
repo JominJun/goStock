@@ -113,12 +113,17 @@ func main() {
 				query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s' OR name='%s'", inp.ID, inp.Name)
 				rows, err := db.Query(query)
 				CheckErr(err)
+
+				// PW 암호화
+				hash := sha256.New()
+				hash.Write([]byte(inp.PW))
+				hashPW := hex.EncodeToString(hash.Sum(nil))
 				
 				if CountRows(rows) == 0 {
-					if inp.ID != "" && inp.PW != "" && inp.Name != "" {
+					if inp.ID != "" && hashPW != "" && inp.Name != "" {
 						t := time.Now()
 						query := fmt.Sprintf("INSERT INTO public.user(id, pw, name, money, register_date, is_admin) VALUES('%s', '%s', '%s', %d, '%d%d%d%d%d', %t)",
-						inp.ID, inp.PW, inp.Name, 50000, t.Year(), int(t.Month()), t.Day(), t.Hour(), t.Minute(), false)
+						inp.ID, hashPW, inp.Name, 50000, t.Year(), int(t.Month()), t.Day(), t.Hour(), t.Minute(), false)
 						_, err := db.Query(query)
 						CheckErr(err)
 
@@ -205,6 +210,67 @@ func main() {
 						"status": http.StatusUnauthorized,
 						"message": "Login Failed",
 					})
+				}
+			}
+		} else {
+			c.JSON(404, gin.H{
+				"status": http.StatusNotFound,
+				"message": "Page Not Found",
+			})
+		}
+	})
+
+	// v1/auth/info => My Info
+	r.GET("v1/auth/info", func(c *gin.Context) {
+		if CheckSubdomain(location.Get(c), "api") {
+			if len(c.Request.Header["Authorization"]) == 0 {
+				c.JSON(400 , gin.H{
+					"status": http.StatusBadRequest,
+					"message": "Authorization Needed. But missing.",
+				})
+			} else {
+				auth := c.Request.Header["Authorization"][0]
+
+				claims := jwt.MapClaims{}
+				_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
+					return JwtKey, nil
+				})
+
+				if err != nil {
+					c.JSON(401, gin.H{
+						"status": http.StatusUnauthorized,
+						"message": "Token is Expired.",
+					})
+				} else {
+					isValid := false
+
+					for key, val := range claims {
+						if key == "ID" {
+							query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s'", val)
+							rows, err := db.Query(query)
+							CheckErr(err)
+
+							if CountRows(rows) == 1 {
+								isValid = true
+							}
+						}
+					}
+
+					if isValid {
+						// DB 처리
+						//query := fmt.Sprintf("SELECT id, name,  FROM public.company")
+						//rows, err := db.Query(query)
+						//CheckErr(err)
+
+						c.JSON(http.StatusOK, gin.H{
+							"status": http.StatusOK,
+						})
+					} else {
+						c.JSON(403, gin.H{
+							"status": http.StatusUnauthorized,
+							"message": "Forbidden. Token is invalid.",
+						})
+					}
 				}
 			}
 		} else {
@@ -643,7 +709,7 @@ func main() {
 		}
 	})
 	
-	// v2/stocks => 내 Stock 조회
+	// v1/stocks => 내 Stock 조회
 	r.GET("/v1/stocks", func(c *gin.Context) {
 		if CheckSubdomain(location.Get(c), "api") {
 			if len(c.Request.Header["Authorization"]) == 0 {
@@ -725,6 +791,9 @@ func main() {
 			})
 		}
 	})
+
+	// v1/stocks => Stock 구매
+
 
   	r.Run(":8081")
 }
