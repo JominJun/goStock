@@ -804,8 +804,114 @@ func main() {
 	})
 
 	// v1/stocks => Stock 구매
-	r.POST("/v1/stocks", func(c *gin.Context) {
-		
+	r.POST("/v1/stocks/:name/:number", func(c *gin.Context) {
+		if CheckSubdomain(location.Get(c), "api") {
+			if len(c.Request.Header["Authorization"]) == 0 {
+				c.JSON(400 , gin.H{
+					"status": http.StatusBadRequest,
+					"message": "Authorization Needed. But missing.",
+				})
+			} else {
+				auth := c.Request.Header["Authorization"][0]
+
+				claims := jwt.MapClaims{}
+				_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
+					return JwtKey, nil
+				})
+
+				if err != nil {
+					c.JSON(401, gin.H{
+						"status": http.StatusUnauthorized,
+						"message": "Token is Expired.",
+					})
+				} else {
+					isValid := false
+					id := ""
+
+					for key, val := range claims {
+						if key == "ID" {
+							query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s'", val)
+							rows, err := db.Query(query)
+							CheckErr(err)
+
+							id = fmt.Sprintf("%s", val)
+
+							if CountRows(rows) == 1 {
+								isValid = true
+							}
+						}
+					}
+
+					if isValid {
+						name := c.Param("name")
+						number, errParam := strconv.Atoi(c.Param("number"))
+
+						if errParam != nil {
+							c.JSON(400, gin.H{
+								"status": http.StatusBadRequest,
+								"message": "number should be numbers.",
+							})
+						} else {
+							if name != "" && number != 0 {
+								query2 := fmt.Sprintf("SELECT value FROM public.%s ORDER BY seq DESC LIMIT 1", name)
+								rows2, err2 := db.Query(query2)
+								
+								if err2 != nil {
+									c.JSON(400, gin.H{
+										"status": http.StatusBadRequest,
+										"message": fmt.Sprintf("No Company Named '%s'", name),
+									})
+								} else {
+									var nowPrice int
+
+									for rows2.Next() {
+										rows2.Scan(&nowPrice)
+									}
+
+									query3 := fmt.Sprintf("SELECT money FROM public.user WHERE id='%s'", id)
+									rows3, err3 := db.Query(query3)
+									CheckErr(err3)
+
+									var ownedMoney int
+
+									for rows3.Next() {
+										rows3.Scan(&ownedMoney)
+									}
+
+									// 보유한 돈이 주식을 사기에 충분하다면
+									if nowPrice * number < ownedMoney {
+										query4 := fmt.Sprintf("INSERT INTO public.stocks(company_name, number, traded_value, trader_id, date) VALUES('%s', %d, %d, '%s', '%s')",
+										name, number, nowPrice, id, getNowTime())
+										_, err4 := db.Query(query4)
+										CheckErr(err4)
+
+										c.JSON(200, gin.H{
+											"status": http.StatusOK,
+											"message": "Successfully Bought.",
+										})
+									} else {
+										c.JSON(400, gin.H{
+											"status": http.StatusBadRequest,
+											"message": "More Money Needed.",
+										})
+									}
+								}
+							} else {
+								c.JSON(400, gin.H{
+									"status": http.StatusBadRequest,
+									"message": "name, number Needed. But something's missing or zero.",
+								})
+							}
+						}
+					} else {
+						c.JSON(403, gin.H{
+							"status": http.StatusForbidden,
+							"message": "Forbidden. Token is invalid.",
+						})
+					}
+				}
+			}
+		}
 	})
 
   	r.Run(":8081")
@@ -875,3 +981,9 @@ func setIatExp() (int64, int64) {
 
 	return iat, exp
 }
+
+func getNowTime() string {
+	t := time.Now()
+	result := fmt.Sprintf("%d%d%d%d%d", t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute())
+	return result
+  }
