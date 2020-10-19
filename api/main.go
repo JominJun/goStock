@@ -49,7 +49,7 @@ type MyStock struct {
 	Number  	int
 	Profit   	int
 	TradedValue	int
-  }
+}
 
 var domain = "api.localhost:8081"
 
@@ -70,7 +70,6 @@ func main() {
 	var r *gin.Engine
 	r = gin.Default()
 
-	//r.LoadHTMLGlob("templates/*")
 	r.Use(location.Default())
 	r.Use(MiddleWare)
 
@@ -96,344 +95,259 @@ func main() {
 
 	JwtKey := []byte("JWT_SECRET_KEY")
 
-	// v1/auth/register => REGISTER
-	r.POST("v1/auth/register", func(c *gin.Context) {
-		if CheckSubdomain(location.Get(c), "api") {
-			var inp AuthInp
+	v1 := r.Group("/v1")
+	{
+		// v1/auth/register => REGISTER
+		v1.POST("/auth/register", func(c *gin.Context) {
+			if CheckSubdomain(location.Get(c), "api") {
+				var inp AuthInp
 
-			if len(c.Request.Header["Authentication"]) == 0 {
-				c.JSON(400 , gin.H{
-					"status": http.StatusBadRequest,
-					"message": "Authentication Needed. But missing.",
-				})
-			} else {
-				auth := c.Request.Header["Authentication"][0]
-				json.Unmarshal([]byte(auth), &inp)
-
-				// DB 처리
-				query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s' OR name='%s'", inp.ID, inp.Name)
-				rows, err := db.Query(query)
-				CheckErr(err)
-
-				// PW 암호화
-				hash := sha256.New()
-				hash.Write([]byte(inp.PW))
-				hashPW := hex.EncodeToString(hash.Sum(nil))
-				
-				if CountRows(rows) == 0 {
-					if inp.ID != "" && hashPW != "" && inp.Name != "" {
-						t := time.Now()
-						query := fmt.Sprintf("INSERT INTO public.user(id, pw, name, money, register_date, is_admin) VALUES('%s', '%s', '%s', %d, '%d%d%d%d%d', %t)",
-						inp.ID, hashPW, inp.Name, 50000, t.Year(), int(t.Month()), t.Day(), t.Hour(), t.Minute(), false)
-						_, err := db.Query(query)
-						CheckErr(err)
-
-						c.JSON(201, gin.H{
-							"status": http.StatusCreated,
-							"message": "Successfully Created",
-						})
-					} else {
-						c.JSON(400, gin.H{
-							"status": http.StatusBadRequest,
-							"message": "ID, PW, Name Needed. But something's missing",
-						})
-					}
-				} else {
-					c.JSON(409, gin.H{
-						"status": http.StatusConflict,
-						"message": "Already Exists. ID and Name should not be overlapped",
+				if len(c.Request.Header["Authentication"]) == 0 {
+					c.JSON(400 , gin.H{
+						"status": http.StatusBadRequest,
+						"message": "Authentication Needed. But missing.",
 					})
-				}
-			}
-		}
-	})
-	
-	// v1/auth/login => LOGIN
-  	r.POST("v1/auth/login", func(c *gin.Context) {
-		if CheckSubdomain(location.Get(c), "api") {
-			var inp AuthInp
-			var oup AuthOup
+				} else {
+					auth := c.Request.Header["Authentication"][0]
+					json.Unmarshal([]byte(auth), &inp)
 
-			if len(c.Request.Header["Authentication"]) == 0 {
-				c.JSON(400 , gin.H{
-					"status": http.StatusBadRequest,
-					"message": "Authentication Needed. But missing.",
-				})
-			} else {
-				auth := c.Request.Header["Authentication"][0]
-				json.Unmarshal([]byte(auth), &inp)
-				
-				// 시간 설정
-				iat, exp := setIatExp()
-
-				// PW 암호화
-				hash := sha256.New()
-				hash.Write([]byte(inp.PW))
-				hashPW := hex.EncodeToString(hash.Sum(nil))
-
-				// DB 처리
-				query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s' AND pw='%s'",
-				inp.ID, hashPW)
-				rows, err := db.Query(query)
-				CheckErr(err)
-				
-				if CountRows(rows) == 1 {
-					query := fmt.Sprintf("SELECT id, name, money, is_admin FROM public.user WHERE id='%s'", inp.ID)
+					// DB 처리
+					query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s' OR name='%s'", inp.ID, inp.Name)
 					rows, err := db.Query(query)
 					CheckErr(err)
 
-					for rows.Next() {
-						err := rows.Scan(&oup.ID, &oup.Name, &oup.Money, &oup.IsAdmin)
-						CheckErr(err)
-					}
+					// PW 암호화
+					hash := sha256.New()
+					hash.Write([]byte(inp.PW))
+					hashPW := hex.EncodeToString(hash.Sum(nil))
 					
-					oup.StandardClaims = jwt.StandardClaims {
-						Audience: GetIP(),
-						Issuer: domain,
-						IssuedAt: iat,
-						ExpiresAt: exp,
-					}
+					if CountRows(rows) == 0 {
+						if inp.ID != "" && hashPW != "" && inp.Name != "" {
+							t := time.Now()
+							query := fmt.Sprintf("INSERT INTO public.user(id, pw, name, money, register_date, is_admin) VALUES('%s', '%s', '%s', %d, '%d%d%d%d%d', %t)",
+							inp.ID, hashPW, inp.Name, 50000, t.Year(), int(t.Month()), t.Day(), t.Hour(), t.Minute(), false)
+							_, err := db.Query(query)
+							CheckErr(err)
 
-					// JWT 설정
-					token := jwt.NewWithClaims(jwt.SigningMethodHS256, oup)
-					tokenString, err := token.SignedString(JwtKey)
+							c.JSON(201, gin.H{
+								"status": http.StatusCreated,
+								"message": "Successfully Created",
+							})
+						} else {
+							c.JSON(400, gin.H{
+								"status": http.StatusBadRequest,
+								"message": "ID, PW, Name Needed. But something's missing",
+							})
+						}
+					} else {
+						c.JSON(409, gin.H{
+							"status": http.StatusConflict,
+							"message": "Already Exists. ID and Name should not be overlapped",
+						})
+					}
+				}
+			}
+		})
+		
+		// v1/auth/login => LOGIN
+		v1.POST("/auth/login", func(c *gin.Context) {
+			if CheckSubdomain(location.Get(c), "api") {
+				var inp AuthInp
+				var oup AuthOup
+
+				if len(c.Request.Header["Authentication"]) == 0 {
+					c.JSON(400 , gin.H{
+						"status": http.StatusBadRequest,
+						"message": "Authentication Needed. But missing.",
+					})
+				} else {
+					auth := c.Request.Header["Authentication"][0]
+					json.Unmarshal([]byte(auth), &inp)
+					
+					// 시간 설정
+					iat, exp := setIatExp()
+
+					// PW 암호화
+					hash := sha256.New()
+					hash.Write([]byte(inp.PW))
+					hashPW := hex.EncodeToString(hash.Sum(nil))
+
+					// DB 처리
+					query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s' AND pw='%s'",
+					inp.ID, hashPW)
+					rows, err := db.Query(query)
 					CheckErr(err)
-
-					c.JSON(200, gin.H{
-						"status": http.StatusOK,
-						"access_token": tokenString,
-					})
-
-					// 쿠키
-					//c.SetCookie("access_token", tokenString, 1800, "", "", false, false)
-				} else {
-					c.JSON(401, gin.H{
-						"status": http.StatusUnauthorized,
-						"message": "Login Failed",
-					})
-				}
-			}
-		} else {
-			c.JSON(404, gin.H{
-				"status": http.StatusNotFound,
-				"message": "Page Not Found",
-			})
-		}
-	})
-
-	// v1/auth/info => My Info
-	r.GET("v1/auth/info", func(c *gin.Context) {
-		if CheckSubdomain(location.Get(c), "api") {
-			if len(c.Request.Header["Authorization"]) == 0 {
-				c.JSON(400 , gin.H{
-					"status": http.StatusBadRequest,
-					"message": "Authorization Needed. But missing.",
-				})
-			} else {
-				auth := c.Request.Header["Authorization"][0]
-
-				claims := jwt.MapClaims{}
-				_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
-					return JwtKey, nil
-				})
-
-				if err != nil {
-					c.JSON(403, gin.H{
-						"status": http.StatusForbidden,
-						"message": "Token is Expired.",
-					})
-				} else {
-					isValid := false
-					id := ""
-
-					for key, val := range claims {
-						if key == "ID" {
-							query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s'", val)
-							rows, err := db.Query(query)
-							CheckErr(err)
-
-							id = fmt.Sprintf("%s", val)
-
-							if CountRows(rows) == 1 {
-								isValid = true
-							}
-						}
-					}
-
-					if isValid {
-						// DB 처리
-						query := fmt.Sprintf("SELECT id, name, money, is_admin FROM public.user WHERE id='%s'", id)
+					
+					if CountRows(rows) == 1 {
+						query := fmt.Sprintf("SELECT id, name, money, is_admin FROM public.user WHERE id='%s'", inp.ID)
 						rows, err := db.Query(query)
 						CheckErr(err)
 
-						var result AuthOup
-
 						for rows.Next() {
-							rows.Scan(&result.ID, &result.Name, &result.Money, &result.IsAdmin)
+							err := rows.Scan(&oup.ID, &oup.Name, &oup.Money, &oup.IsAdmin)
+							CheckErr(err)
+						}
+						
+						oup.StandardClaims = jwt.StandardClaims {
+							Audience: GetIP(),
+							Issuer: domain,
+							IssuedAt: iat,
+							ExpiresAt: exp,
 						}
 
-						c.JSON(http.StatusOK, gin.H{
+						// JWT 설정
+						token := jwt.NewWithClaims(jwt.SigningMethodHS256, oup)
+						tokenString, err := token.SignedString(JwtKey)
+						CheckErr(err)
+
+						c.JSON(200, gin.H{
 							"status": http.StatusOK,
-							"result": result,
+							"access_token": tokenString,
 						})
+
+						// 쿠키
+						//c.SetCookie("access_token", tokenString, 1800, "", "", false, false)
 					} else {
+						c.JSON(401, gin.H{
+							"status": http.StatusUnauthorized,
+							"message": "Login Failed",
+						})
+					}
+				}
+			} else {
+				c.JSON(404, gin.H{
+					"status": http.StatusNotFound,
+					"message": "Page Not Found",
+				})
+			}
+		})
+
+		// v1/auth/info => My Info
+		v1.GET("/auth/info", func(c *gin.Context) {
+			if CheckSubdomain(location.Get(c), "api") {
+				if len(c.Request.Header["Authorization"]) == 0 {
+					c.JSON(400 , gin.H{
+						"status": http.StatusBadRequest,
+						"message": "Authorization Needed. But missing.",
+					})
+				} else {
+					auth := c.Request.Header["Authorization"][0]
+
+					claims := jwt.MapClaims{}
+					_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
+						return JwtKey, nil
+					})
+
+					if err != nil {
 						c.JSON(403, gin.H{
 							"status": http.StatusForbidden,
 							"message": "Token is Expired.",
 						})
-					}
-				}
-			}
-		} else {
-			c.JSON(404, gin.H{
-				"status": http.StatusNotFound,
-				"message": "Page Not Found",
-			})
-		}
-	})
-
-	// v1/company => Company 전체조회
-	r.GET("/v1/company", func(c *gin.Context) {
-		if CheckSubdomain(location.Get(c), "api") {
-			if len(c.Request.Header["Authorization"]) == 0 {
-				c.JSON(400 , gin.H{
-					"status": http.StatusBadRequest,
-					"message": "Authorization Needed. But missing.",
-				})
-			} else {
-				auth := c.Request.Header["Authorization"][0]
-
-				claims := jwt.MapClaims{}
-				_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
-					return JwtKey, nil
-				})
-
-				if err != nil {
-					c.JSON(403, gin.H{
-						"status": http.StatusForbidden,
-						"message": "Token is Expired.",
-					})
-				} else {
-					isValid := false
-
-					for key, val := range claims {
-						if key == "ID" {
-							query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s'", val)
-							rows, err := db.Query(query)
-							CheckErr(err)
-
-							if CountRows(rows) == 1 {
-								isValid = true
-							}
-						}
-					}
-
-					if isValid {
-						// DB 처리
-						query := fmt.Sprintf("SELECT seq, name, description FROM public.company")
-						rows, err := db.Query(query)
-						CheckErr(err)
-
-						var companyList = []Company{}
-
-						for rows.Next() {
-							var c Company
-							errScan := rows.Scan(&c.Seq, &c.Name, &c.Description)
-							CheckErr(errScan)
-
-							query2 := fmt.Sprintf("SELECT value FROM %s ORDER BY seq DESC LIMIT 1", c.Name)
-							rows2, err2 := db.Query(query2)
-							CheckErr(err2)
-
-							for rows2.Next() {
-								errScan2 := rows2.Scan(&c.StockValue)
-								CheckErr(errScan2)
-							}
-
-							companyList = append(companyList, c)
-						}
-
-						c.JSON(http.StatusOK, gin.H{
-							"status": http.StatusOK,
-							"result": companyList,
-						})
 					} else {
-						c.JSON(403, gin.H{
-							"status": http.StatusForbidden,
-							"message": "Token is Expired.",
-						})
-					}
-				}
-			}
-		} else {
-			c.JSON(404, gin.H{
-				"status": http.StatusNotFound,
-				"message": "Page Not Found",
-			})
-		}
-	})
+						isValid := false
+						id := ""
 
-	// v1/company/:name => Company 조건조회
-	r.GET("/v1/company/:name", func(c *gin.Context) {
-		if CheckSubdomain(location.Get(c), "api") {
-			if len(c.Request.Header["Authorization"]) == 0 {
-				c.JSON(400 , gin.H{
-					"status": http.StatusBadRequest,
-					"message": "Authorization Needed. But missing.",
-				})
-			} else {
-				auth := c.Request.Header["Authorization"][0]
+						for key, val := range claims {
+							if key == "ID" {
+								query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s'", val)
+								rows, err := db.Query(query)
+								CheckErr(err)
 
-				claims := jwt.MapClaims{}
-				_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
-					return JwtKey, nil
-				})
+								id = fmt.Sprintf("%s", val)
 
-				if err != nil {
-					c.JSON(401, gin.H{
-						"status": http.StatusUnauthorized,
-						"message": "Token is Expired.",
-					})
-				} else {
-					isValid := false
-
-					for key, val := range claims {
-						if key == "ID" {
-							query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s'", val)
-							rows, err := db.Query(query)
-							CheckErr(err)
-
-							if CountRows(rows) == 1 {
-								isValid = true
+								if CountRows(rows) == 1 {
+									isValid = true
+								}
 							}
 						}
-					}
 
-					if isValid {
-						name := c.Param("name")
-						query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.company WHERE name='%s'", name)
-						rows, err := db.Query(query)
-						CheckErr(err)
-
-						if CountRows(rows) == 1 {
+						if isValid {
 							// DB 처리
-							query2 := fmt.Sprintf("SELECT seq, name, description FROM public.company WHERE name='%s'", name)
-							rows2, err2 := db.Query(query2)
-							CheckErr(err2)
+							query := fmt.Sprintf("SELECT id, name, money, is_admin FROM public.user WHERE id='%s'", id)
+							rows, err := db.Query(query)
+							CheckErr(err)
+
+							var result AuthOup
+
+							for rows.Next() {
+								rows.Scan(&result.ID, &result.Name, &result.Money, &result.IsAdmin)
+							}
+
+							c.JSON(http.StatusOK, gin.H{
+								"status": http.StatusOK,
+								"result": result,
+							})
+						} else {
+							c.JSON(403, gin.H{
+								"status": http.StatusForbidden,
+								"message": "Token is Expired.",
+							})
+						}
+					}
+				}
+			} else {
+				c.JSON(404, gin.H{
+					"status": http.StatusNotFound,
+					"message": "Page Not Found",
+				})
+			}
+		})
+
+		// v1/company => Company 전체조회
+		v1.GET("/company", func(c *gin.Context) {
+			if CheckSubdomain(location.Get(c), "api") {
+				if len(c.Request.Header["Authorization"]) == 0 {
+					c.JSON(400 , gin.H{
+						"status": http.StatusBadRequest,
+						"message": "Authorization Needed. But missing.",
+					})
+				} else {
+					auth := c.Request.Header["Authorization"][0]
+
+					claims := jwt.MapClaims{}
+					_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
+						return JwtKey, nil
+					})
+
+					if err != nil {
+						c.JSON(403, gin.H{
+							"status": http.StatusForbidden,
+							"message": "Token is Expired.",
+						})
+					} else {
+						isValid := false
+
+						for key, val := range claims {
+							if key == "ID" {
+								query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s'", val)
+								rows, err := db.Query(query)
+								CheckErr(err)
+
+								if CountRows(rows) == 1 {
+									isValid = true
+								}
+							}
+						}
+
+						if isValid {
+							// DB 처리
+							query := fmt.Sprintf("SELECT seq, name, description FROM public.company")
+							rows, err := db.Query(query)
+							CheckErr(err)
 
 							var companyList = []Company{}
 
-							for rows2.Next() {
+							for rows.Next() {
 								var c Company
-								errScan := rows2.Scan(&c.Seq, &c.Name, &c.Description)
+								errScan := rows.Scan(&c.Seq, &c.Name, &c.Description)
 								CheckErr(errScan)
 
-								query3 := fmt.Sprintf("SELECT value FROM %s ORDER BY seq DESC LIMIT 1", c.Name)
-								rows3, err3 := db.Query(query3)
-								CheckErr(err3)
+								query2 := fmt.Sprintf("SELECT value FROM %s ORDER BY seq DESC LIMIT 1", c.Name)
+								rows2, err2 := db.Query(query2)
+								CheckErr(err2)
 
-								for rows3.Next() {
-									errScan2 := rows3.Scan(&c.StockValue)
+								for rows2.Next() {
+									errScan2 := rows2.Scan(&c.StockValue)
 									CheckErr(errScan2)
 								}
 
@@ -445,623 +359,711 @@ func main() {
 								"result": companyList,
 							})
 						} else {
-							c.JSON(400, gin.H{
-								"status": http.StatusBadRequest,
-								"message": fmt.Sprintf("No Company Named '%s'", name),
+							c.JSON(403, gin.H{
+								"status": http.StatusForbidden,
+								"message": "Token is Expired.",
 							})
 						}
+					}
+				}
+			} else {
+				c.JSON(404, gin.H{
+					"status": http.StatusNotFound,
+					"message": "Page Not Found",
+				})
+			}
+		})
+
+		// v1/company/:name => Company 조건조회
+		v1.GET("/company/:name", func(c *gin.Context) {
+			if CheckSubdomain(location.Get(c), "api") {
+				if len(c.Request.Header["Authorization"]) == 0 {
+					c.JSON(400 , gin.H{
+						"status": http.StatusBadRequest,
+						"message": "Authorization Needed. But missing.",
+					})
+				} else {
+					auth := c.Request.Header["Authorization"][0]
+
+					claims := jwt.MapClaims{}
+					_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
+						return JwtKey, nil
+					})
+
+					if err != nil {
+						c.JSON(401, gin.H{
+							"status": http.StatusUnauthorized,
+							"message": "Token is Expired.",
+						})
 					} else {
+						isValid := false
+
+						for key, val := range claims {
+							if key == "ID" {
+								query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s'", val)
+								rows, err := db.Query(query)
+								CheckErr(err)
+
+								if CountRows(rows) == 1 {
+									isValid = true
+								}
+							}
+						}
+
+						if isValid {
+							name := c.Param("name")
+							query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.company WHERE name='%s'", name)
+							rows, err := db.Query(query)
+							CheckErr(err)
+
+							if CountRows(rows) == 1 {
+								// DB 처리
+								query2 := fmt.Sprintf("SELECT seq, name, description FROM public.company WHERE name='%s'", name)
+								rows2, err2 := db.Query(query2)
+								CheckErr(err2)
+
+								var companyList = []Company{}
+
+								for rows2.Next() {
+									var c Company
+									errScan := rows2.Scan(&c.Seq, &c.Name, &c.Description)
+									CheckErr(errScan)
+
+									query3 := fmt.Sprintf("SELECT value FROM %s ORDER BY seq DESC LIMIT 1", c.Name)
+									rows3, err3 := db.Query(query3)
+									CheckErr(err3)
+
+									for rows3.Next() {
+										errScan2 := rows3.Scan(&c.StockValue)
+										CheckErr(errScan2)
+									}
+
+									companyList = append(companyList, c)
+								}
+
+								c.JSON(http.StatusOK, gin.H{
+									"status": http.StatusOK,
+									"result": companyList,
+								})
+							} else {
+								c.JSON(400, gin.H{
+									"status": http.StatusBadRequest,
+									"message": fmt.Sprintf("No Company Named '%s'", name),
+								})
+							}
+						} else {
+							c.JSON(403, gin.H{
+								"status": http.StatusForbidden,
+								"message": "Forbidden. Token is invalid.",
+							})
+						}
+					}
+				}
+			} else {
+				c.JSON(404, gin.H{
+					"status": http.StatusNotFound,
+					"message": "Page Not Found",
+				})
+			}
+		})
+
+		// v1/company => Company 추가 [[ADMIN]]
+		v1.POST("/company", func(c *gin.Context) {
+			if CheckSubdomain(location.Get(c), "api") {
+				if len(c.Request.Header["Authorization"]) == 0 {
+					c.JSON(400 , gin.H{
+						"status": http.StatusBadRequest,
+						"message": "Authorization Needed. But missing.",
+					})
+				} else {
+					auth := c.Request.Header["Authorization"][0]
+
+					claims := jwt.MapClaims{}
+					_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
+						return JwtKey, nil
+					})
+
+					if err != nil {
 						c.JSON(403, gin.H{
 							"status": http.StatusForbidden,
-							"message": "Forbidden. Token is invalid.",
+							"message": "Token is Expired.",
 						})
-					}
-				}
-			}
-		} else {
-			c.JSON(404, gin.H{
-				"status": http.StatusNotFound,
-				"message": "Page Not Found",
-			})
-		}
-	})
-
-	// v1/company => Company 추가 [[ADMIN]]
-	r.POST("/v1/company", func(c *gin.Context) {
-		if CheckSubdomain(location.Get(c), "api") {
-			if len(c.Request.Header["Authorization"]) == 0 {
-				c.JSON(400 , gin.H{
-					"status": http.StatusBadRequest,
-					"message": "Authorization Needed. But missing.",
-				})
-			} else {
-				auth := c.Request.Header["Authorization"][0]
-
-				claims := jwt.MapClaims{}
-				_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
-					return JwtKey, nil
-				})
-
-				if err != nil {
-					c.JSON(403, gin.H{
-						"status": http.StatusForbidden,
-						"message": "Token is Expired.",
-					})
-				} else {
-					isAdmin := false
-
-					for key, val := range claims {
-						if key == "ID" {
-							query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s' AND is_admin=true", val)
-							rows, err := db.Query(query)
-							CheckErr(err)
-
-							if CountRows(rows) == 1 {
-								isAdmin = true
-							}
-						}
-					}
-
-					if isAdmin {
-						name := c.Query("name")
-						description := c.Query("description")
-
-						if name != "" && description != "" {
-							// DB 처리
-							query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.company WHERE name='%s'", name)
-							rows, err := db.Query(query)
-							CheckErr(err)
-
-							if CountRows(rows) == 0 {
-								query2 := fmt.Sprintf("INSERT INTO public.company(name, description) VALUES('%s', '%s')", name, description)
-								_, err2 := db.Query(query2)
-								CheckErr(err2)
-
-								query3 := fmt.Sprintf("CREATE TABLE %s(seq integer, value integer NOT NULL, date text NOT NULL, PRIMARY KEY (seq))", name)
-								_, err3 := db.Exec(query3)
-								CheckErr(err3)
-
-								query4 := fmt.Sprintf("COMMENT ON TABLE %s IS '%s'", name, description)
-								_, err4 := db.Exec(query4)
-								CheckErr(err4)
-
-								query5 := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN seq ADD GENERATED ALWAYS AS IDENTITY", name)
-								_, err5 := db.Exec(query5)
-								CheckErr(err5)
-
-								c.JSON(200, gin.H{
-									"status": http.StatusOK,
-									"message": "Successfully Added.",
-								})
-							} else {
-								c.JSON(409, gin.H{
-									"status": http.StatusConflict,
-									"message": "Already Exists.",
-								})
-							}
-						} else {
-							c.JSON(400, gin.H{
-								"status": http.StatusBadRequest,
-								"message": "name, description needed. But something's missing.",
-							})
-						}
 					} else {
-						c.JSON(401, gin.H{
-							"status": http.StatusUnauthorized,
-							"message": "Admin Auth Needed.",
-						})
-					}
-				}
-			}
-		} else {
-			c.JSON(404, gin.H{
-				"status": http.StatusNotFound,
-				"message": "Page Not Found",
-			})
-		}
-	})
+						isAdmin := false
 
-	// v1/company => Company 수정 [[ADMIN]]
-	r.PUT("/v1/company", func(c *gin.Context) {
-		if CheckSubdomain(location.Get(c), "api") {
-			if len(c.Request.Header["Authorization"]) == 0 {
-				c.JSON(400 , gin.H{
-					"status": http.StatusBadRequest,
-					"message": "Authorization Needed. But missing.",
-				})
-			} else {
-				auth := c.Request.Header["Authorization"][0]
+						for key, val := range claims {
+							if key == "ID" {
+								query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s' AND is_admin=true", val)
+								rows, err := db.Query(query)
+								CheckErr(err)
 
-				claims := jwt.MapClaims{}
-				_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
-					return JwtKey, nil
-				})
-
-				if err != nil {
-					c.JSON(403, gin.H{
-						"status": http.StatusForbidden,
-						"message": "Token is Expired.",
-					})
-				} else {
-					isAdmin := false
-
-					for key, val := range claims {
-						if key == "ID" {
-							query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s' AND is_admin=true", val)
-							rows, err := db.Query(query)
-							CheckErr(err)
-
-							if CountRows(rows) == 1 {
-								isAdmin = true
+								if CountRows(rows) == 1 {
+									isAdmin = true
+								}
 							}
 						}
-					}
 
-					if isAdmin {
-						name := c.Query("name")
-						description := c.Query("description")
+						if isAdmin {
+							name := c.Query("name")
+							description := c.Query("description")
 
-						if name != "" && description != "" {
-							// DB 처리
-							query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.company WHERE name='%s'", name)
-							rows, err := db.Query(query)
-							CheckErr(err)
+							if name != "" && description != "" {
+								// DB 처리
+								query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.company WHERE name='%s'", name)
+								rows, err := db.Query(query)
+								CheckErr(err)
 
-							if CountRows(rows) == 1 {
-								query2 := fmt.Sprintf("UPDATE public.company SET description='%s' WHERE name='%s'", description, name)
-								_, err2 := db.Query(query2)
-								CheckErr(err2)
+								if CountRows(rows) == 0 {
+									query2 := fmt.Sprintf("INSERT INTO public.company(name, description) VALUES('%s', '%s')", name, description)
+									_, err2 := db.Query(query2)
+									CheckErr(err2)
 
-								c.JSON(200, gin.H{
-									"status": http.StatusOK,
-									"message": "Successfully Modified.",
-								})
+									query3 := fmt.Sprintf("CREATE TABLE %s(seq integer, value integer NOT NULL, date text NOT NULL, PRIMARY KEY (seq))", name)
+									_, err3 := db.Exec(query3)
+									CheckErr(err3)
+
+									query4 := fmt.Sprintf("COMMENT ON TABLE %s IS '%s'", name, description)
+									_, err4 := db.Exec(query4)
+									CheckErr(err4)
+
+									query5 := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN seq ADD GENERATED ALWAYS AS IDENTITY", name)
+									_, err5 := db.Exec(query5)
+									CheckErr(err5)
+
+									c.JSON(200, gin.H{
+										"status": http.StatusOK,
+										"message": "Successfully Added.",
+									})
+								} else {
+									c.JSON(409, gin.H{
+										"status": http.StatusConflict,
+										"message": "Already Exists.",
+									})
+								}
 							} else {
 								c.JSON(400, gin.H{
 									"status": http.StatusBadRequest,
-									"message": fmt.Sprintf("No Company Named '%s'", name),
+									"message": "name, description needed. But something's missing.",
 								})
 							}
 						} else {
-							c.JSON(400, gin.H{
-								"status": http.StatusBadRequest,
-								"message": "name, description needed. But something's missing.",
+							c.JSON(401, gin.H{
+								"status": http.StatusUnauthorized,
+								"message": "Admin Auth Needed.",
 							})
 						}
-					} else {
-						c.JSON(401, gin.H{
-							"status": http.StatusUnauthorized,
-							"message": "Admin Auth Needed.",
-						})
 					}
 				}
-			}
-		}
-	})
-
-	// v1/company => Company 파산 [[ADMIN]]
-	r.DELETE("/v1/company", func(c *gin.Context) {
-		if CheckSubdomain(location.Get(c), "api") {
-			if len(c.Request.Header["Authorization"]) == 0 {
-				c.JSON(400 , gin.H{
-					"status": http.StatusBadRequest,
-					"message": "Authorization Needed. But missing.",
-				})
 			} else {
-				auth := c.Request.Header["Authorization"][0]
-
-				claims := jwt.MapClaims{}
-				_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
-					return JwtKey, nil
+				c.JSON(404, gin.H{
+					"status": http.StatusNotFound,
+					"message": "Page Not Found",
 				})
+			}
+		})
 
-				if err != nil {
-					c.JSON(403, gin.H{
-						"status": http.StatusForbidden,
-						"message": "Token is Expired.",
+		// v1/company => Company 수정 [[ADMIN]]
+		v1.PUT("/company", func(c *gin.Context) {
+			if CheckSubdomain(location.Get(c), "api") {
+				if len(c.Request.Header["Authorization"]) == 0 {
+					c.JSON(400 , gin.H{
+						"status": http.StatusBadRequest,
+						"message": "Authorization Needed. But missing.",
 					})
 				} else {
-					isAdmin := false
+					auth := c.Request.Header["Authorization"][0]
 
-					for key, val := range claims {
-						if key == "ID" {
-							query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s' AND is_admin=true", val)
-							rows, err := db.Query(query)
-							CheckErr(err)
-
-							if CountRows(rows) == 1 {
-								isAdmin = true
-							}
-						}
-					}
-
-					if isAdmin {
-						name := c.Query("name")
-
-						if name != "" {
-							// DB 처리
-							query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.company WHERE name='%s'", name)
-							rows, err := db.Query(query)
-							CheckErr(err)
-
-							if CountRows(rows) == 1 {
-								query2 := fmt.Sprintf("DELETE FROM public.company WHERE name='%s'", name)
-								_, err2 := db.Query(query2)
-								CheckErr(err2)
-
-								query3 := fmt.Sprintf("DROP TABLE IF EXISTS %s", name)
-								_, err3 := db.Query(query3)
-								CheckErr(err3)
-
-								c.JSON(200, gin.H{
-									"status": http.StatusOK,
-									"message": "Successfully Bankrupted.",
-								})
-							} else {
-								c.JSON(400, gin.H{
-									"status": http.StatusBadRequest,
-									"message": fmt.Sprintf("No Company Named '%s'", name),
-								})
-							}
-						} else {
-							c.JSON(400, gin.H{
-								"status": http.StatusBadRequest,
-								"message": "name, description needed. But something's missing.",
-							})
-						}
-					} else {
-						c.JSON(401, gin.H{
-							"status": http.StatusUnauthorized,
-							"message": "Admin Auth Needed.",
-						})
-					}
-				}
-			}
-		}
-	})
-	
-	// v1/stocks => 내 Stock 조회
-	r.GET("/v1/stocks", func(c *gin.Context) {
-		if CheckSubdomain(location.Get(c), "api") {
-			if len(c.Request.Header["Authorization"]) == 0 {
-				c.JSON(400 , gin.H{
-					"status": http.StatusBadRequest,
-					"message": "Authorization Needed. But missing.",
-				})
-			} else {
-				auth := c.Request.Header["Authorization"][0]
-
-				claims := jwt.MapClaims{}
-				_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
-					return JwtKey, nil
-				})
-
-				if err != nil {
-					c.JSON(403, gin.H{
-						"status": http.StatusForbidden,
-						"message": "Token is Expired.",
+					claims := jwt.MapClaims{}
+					_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
+						return JwtKey, nil
 					})
-				} else {
-					var id string
-					isValid := false
 
-					for key, val := range claims {
-						if key == "ID" {
-							query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s'", val)
-							rows, err := db.Query(query)
-							CheckErr(err)
-
-							if CountRows(rows) == 1 {
-								isValid = true
-								id = fmt.Sprintf("%s", val)
-							}
-						}
-					}
-
-					if isValid {
-						query := fmt.Sprintf("SELECT company_name, number, traded_value FROM stocks WHERE trader_id='%s'", id)
-						rows, err := db.Query(query)
-						CheckErr(err)
-
-						result := []MyStock{}
-
-						for rows.Next() {
-							var m MyStock
-							rows.Scan(&m.Name, &m.Number, &m.TradedValue)
-
-							query2 := fmt.Sprintf("SELECT value FROM %s ORDER BY seq DESC LIMIT 1", m.Name)
-							rows2, err2 := db.Query(query2)
-							CheckErr(err2)
-
-							for rows2.Next() {
-								var nowValue int
-								rows2.Scan(&nowValue)
-
-								m.Profit = (nowValue - m.TradedValue) * m.Number
-							}
-
-							result = append(result, m)
-						}
-
-						c.JSON(200, gin.H{
-							"status": http.StatusOK,
-							"result": result,
-						})
-					} else {
+					if err != nil {
 						c.JSON(403, gin.H{
-							"status": http.StatusUnauthorized,
-							"message": "Forbidden. Token is invalid.",
+							"status": http.StatusForbidden,
+							"message": "Token is Expired.",
 						})
-					}
-				}
-			}
-		} else {
-			c.JSON(404, gin.H{
-				"status": http.StatusNotFound,
-				"message": "Page Not Found",
-			})
-		}
-	})
+					} else {
+						isAdmin := false
 
-	// v1/stocks => Stock 구매
-	r.POST("/v1/stocks/:name/:number", func(c *gin.Context) {
-		if CheckSubdomain(location.Get(c), "api") {
-			if len(c.Request.Header["Authorization"]) == 0 {
-				c.JSON(400 , gin.H{
-					"status": http.StatusBadRequest,
-					"message": "Authorization Needed. But missing.",
-				})
-			} else {
-				auth := c.Request.Header["Authorization"][0]
+						for key, val := range claims {
+							if key == "ID" {
+								query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s' AND is_admin=true", val)
+								rows, err := db.Query(query)
+								CheckErr(err)
 
-				claims := jwt.MapClaims{}
-				_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
-					return JwtKey, nil
-				})
-
-				if err != nil {
-					c.JSON(401, gin.H{
-						"status": http.StatusUnauthorized,
-						"message": "Token is Expired.",
-					})
-				} else {
-					isValid := false
-					id := ""
-
-					for key, val := range claims {
-						if key == "ID" {
-							query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s'", val)
-							rows, err := db.Query(query)
-							CheckErr(err)
-
-							id = fmt.Sprintf("%s", val)
-
-							if CountRows(rows) == 1 {
-								isValid = true
+								if CountRows(rows) == 1 {
+									isAdmin = true
+								}
 							}
 						}
-					}
 
-					if isValid {
-						name := c.Param("name")
-						number, errParam := strconv.Atoi(c.Param("number"))
+						if isAdmin {
+							name := c.Query("name")
+							description := c.Query("description")
 
-						if errParam != nil {
-							c.JSON(400, gin.H{
-								"status": http.StatusBadRequest,
-								"message": "number should be numbers.",
-							})
-						} else {
-							if name != "" && number != 0 {
-								query2 := fmt.Sprintf("SELECT value FROM public.%s ORDER BY seq DESC LIMIT 1", name)
-								rows2, err2 := db.Query(query2)
-								
-								if err2 != nil {
+							if name != "" && description != "" {
+								// DB 처리
+								query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.company WHERE name='%s'", name)
+								rows, err := db.Query(query)
+								CheckErr(err)
+
+								if CountRows(rows) == 1 {
+									query2 := fmt.Sprintf("UPDATE public.company SET description='%s' WHERE name='%s'", description, name)
+									_, err2 := db.Query(query2)
+									CheckErr(err2)
+
+									c.JSON(200, gin.H{
+										"status": http.StatusOK,
+										"message": "Successfully Modified.",
+									})
+								} else {
 									c.JSON(400, gin.H{
 										"status": http.StatusBadRequest,
 										"message": fmt.Sprintf("No Company Named '%s'", name),
 									})
-								} else {
-									var nowPrice int
-
-									for rows2.Next() {
-										rows2.Scan(&nowPrice)
-									}
-
-									query3 := fmt.Sprintf("SELECT money FROM public.user WHERE id='%s'", id)
-									rows3, err3 := db.Query(query3)
-									CheckErr(err3)
-
-									var ownedMoney int
-
-									for rows3.Next() {
-										rows3.Scan(&ownedMoney)
-									}
-
-									// 보유한 돈이 주식을 사기에 충분하다면
-									if nowPrice * number < ownedMoney {
-										query4 := fmt.Sprintf("INSERT INTO public.stocks(company_name, number, traded_value, trader_id, date) VALUES('%s', %d, %d, '%s', '%s')",
-										name, number, nowPrice, id, getNowTime())
-										_, err4 := db.Query(query4)
-										CheckErr(err4)
-
-										c.JSON(200, gin.H{
-											"status": http.StatusOK,
-											"message": "Successfully Bought.",
-										})
-									} else {
-										c.JSON(400, gin.H{
-											"status": http.StatusBadRequest,
-											"message": "More Money Needed.",
-										})
-									}
 								}
 							} else {
 								c.JSON(400, gin.H{
 									"status": http.StatusBadRequest,
-									"message": "name, number Needed. But something's missing or zero.",
+									"message": "name, description needed. But something's missing.",
 								})
 							}
+						} else {
+							c.JSON(401, gin.H{
+								"status": http.StatusUnauthorized,
+								"message": "Admin Auth Needed.",
+							})
 						}
-					} else {
-						c.JSON(403, gin.H{
-							"status": http.StatusForbidden,
-							"message": "Forbidden. Token is invalid.",
-						})
 					}
 				}
 			}
-		}
-	})
+		})
 
-	// v1/stock => Stock 판매
-	r.DELETE("/v1/stocks/:name/:number", func(c *gin.Context) {
-		if CheckSubdomain(location.Get(c), "api") {
-			if len(c.Request.Header["Authorization"]) == 0 {
-				c.JSON(400 , gin.H{
-					"status": http.StatusBadRequest,
-					"message": "Authorization Needed. But missing.",
-				})
-			} else {
-				auth := c.Request.Header["Authorization"][0]
-
-				claims := jwt.MapClaims{}
-				_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
-					return JwtKey, nil
-				})
-
-				if err != nil {
-					c.JSON(401, gin.H{
-						"status": http.StatusUnauthorized,
-						"message": "Token is Expired.",
+		// v1/company => Company 파산 [[ADMIN]]
+		v1.DELETE("/company", func(c *gin.Context) {
+			if CheckSubdomain(location.Get(c), "api") {
+				if len(c.Request.Header["Authorization"]) == 0 {
+					c.JSON(400 , gin.H{
+						"status": http.StatusBadRequest,
+						"message": "Authorization Needed. But missing.",
 					})
 				} else {
-					isValid := false
-					id := ""
+					auth := c.Request.Header["Authorization"][0]
 
-					for key, val := range claims {
-						if key == "ID" {
-							query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s'", val)
-							rows, err := db.Query(query)
-							CheckErr(err)
+					claims := jwt.MapClaims{}
+					_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
+						return JwtKey, nil
+					})
 
-							id = fmt.Sprintf("%s", val)
+					if err != nil {
+						c.JSON(403, gin.H{
+							"status": http.StatusForbidden,
+							"message": "Token is Expired.",
+						})
+					} else {
+						isAdmin := false
 
-							if CountRows(rows) == 1 {
-								isValid = true
+						for key, val := range claims {
+							if key == "ID" {
+								query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s' AND is_admin=true", val)
+								rows, err := db.Query(query)
+								CheckErr(err)
+
+								if CountRows(rows) == 1 {
+									isAdmin = true
+								}
 							}
 						}
-					}
 
-					if isValid {
-						name := c.Param("name")
-						number, errParam := strconv.Atoi(c.Param("number"))
+						if isAdmin {
+							name := c.Query("name")
 
-						if errParam != nil {
-							c.JSON(400, gin.H{
-								"status": http.StatusBadRequest,
-								"message": "number should be numbers.",
-							})
-						} else {
-							if name != "" && number != 0 {
-								query2 := fmt.Sprintf("SELECT number FROM public.stocks WHERE trader_id='%s' AND company_name='%s'", id, name)
-								rows2, err2 := db.Query(query2)
-								CheckErr(err2)
+							if name != "" {
+								// DB 처리
+								query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.company WHERE name='%s'", name)
+								rows, err := db.Query(query)
+								CheckErr(err)
 
-								ownedStockCount := 0
-								forCnt := 0
+								if CountRows(rows) == 1 {
+									query2 := fmt.Sprintf("DELETE FROM public.company WHERE name='%s'", name)
+									_, err2 := db.Query(query2)
+									CheckErr(err2)
 
-								for rows2.Next() {
-									rows2.Scan(&forCnt)
-									ownedStockCount += forCnt
-								}
-
-								if ownedStockCount >= number {
-									var tradedValueList []int
-									processedNumber := 0
-
-									for {
-										if processedNumber == number {
-											break
-										}
-
-										query3 := fmt.Sprintf("SELECT number, traded_value FROM public.stocks WHERE trader_id='%s' AND company_name='%s' ORDER BY seq DESC LIMIT 1", id, name)
-										rows3, err3 := db.Query(query3)
-										CheckErr(err3)
-
-										var n, tradedValue int
-
-										for rows3.Next() {
-											rows3.Scan(&n, &tradedValue)
-											tradedValueList = append(tradedValueList, tradedValue)
-											
-											if processedNumber + n > number {
-												query4 := fmt.Sprintf("UPDATE public.stocks SET number=number-%d WHERE ctid IN (SELECT ctid FROM public.stocks WHERE trader_id='%s' AND company_name='%s' ORDER BY seq DESC LIMIT 1)",
-												number-processedNumber, id, name)
-												_, err4 := db.Query(query4)
-												CheckErr(err4)
-
-												processedNumber = number
-
-												break
-											} else {
-												query4 := fmt.Sprintf("DELETE FROM public.stocks WHERE ctid IN (SELECT ctid FROM public.stocks WHERE trader_id='%s' AND company_name='%s' ORDER BY seq DESC LIMIT 1)",
-												id, name)
-												_, err4 := db.Query(query4)
-												CheckErr(err4)
-												
-												processedNumber += n
-											}
-										}
-									}
-
-									query5 := fmt.Sprintf("SELECT value FROM public.%s ORDER BY seq DESC LIMIT 1", name)
-									rows5, err5 := db.Query(query5)
-									CheckErr(err5)
-
-									var nowPrice int
-									var totalProfit int
-
-									for rows5.Next() {
-										rows5.Scan(&nowPrice)
-									}
-
-									for value := range(tradedValueList) {
-										totalProfit += nowPrice-value
-									}
-
-									query6 := fmt.Sprintf("UPDATE public.user SET money=money+%d WHERE id='%s'", totalProfit, id)
-									_, err6 := db.Query(query6)
-									CheckErr(err6)
+									query3 := fmt.Sprintf("DROP TABLE IF EXISTS %s", name)
+									_, err3 := db.Query(query3)
+									CheckErr(err3)
 
 									c.JSON(200, gin.H{
 										"status": http.StatusOK,
-										"message": "Successfully Selled.",
+										"message": "Successfully Bankrupted.",
 									})
 								} else {
 									c.JSON(400, gin.H{
 										"status": http.StatusBadRequest,
-										"message": "Does not have enough stocks to sell.",
-										"ownedStockCount": ownedStockCount,
+										"message": fmt.Sprintf("No Company Named '%s'", name),
 									})
 								}
 							} else {
 								c.JSON(400, gin.H{
 									"status": http.StatusBadRequest,
-									"message": "name, number Needed. But something's missing or zero.",
+									"message": "name, description needed. But something's missing.",
 								})
 							}
+						} else {
+							c.JSON(401, gin.H{
+								"status": http.StatusUnauthorized,
+								"message": "Admin Auth Needed.",
+							})
 						}
-					} else {
-						c.JSON(403, gin.H{
-							"status": http.StatusForbidden,
-							"message": "Forbidden. Token is invalid.",
-						})
 					}
 				}
 			}
-		}
-	})
+		})
+		
+		// v1/stocks => 내 Stock 조회
+		v1.GET("/stocks", func(c *gin.Context) {
+			if CheckSubdomain(location.Get(c), "api") {
+				if len(c.Request.Header["Authorization"]) == 0 {
+					c.JSON(400 , gin.H{
+						"status": http.StatusBadRequest,
+						"message": "Authorization Needed. But missing.",
+					})
+				} else {
+					auth := c.Request.Header["Authorization"][0]
+
+					claims := jwt.MapClaims{}
+					_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
+						return JwtKey, nil
+					})
+
+					if err != nil {
+						c.JSON(403, gin.H{
+							"status": http.StatusForbidden,
+							"message": "Token is Expired.",
+						})
+					} else {
+						var id string
+						isValid := false
+
+						for key, val := range claims {
+							if key == "ID" {
+								query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s'", val)
+								rows, err := db.Query(query)
+								CheckErr(err)
+
+								if CountRows(rows) == 1 {
+									isValid = true
+									id = fmt.Sprintf("%s", val)
+								}
+							}
+						}
+
+						if isValid {
+							query := fmt.Sprintf("SELECT company_name, number, traded_value FROM stocks WHERE trader_id='%s'", id)
+							rows, err := db.Query(query)
+							CheckErr(err)
+
+							result := []MyStock{}
+
+							for rows.Next() {
+								var m MyStock
+								rows.Scan(&m.Name, &m.Number, &m.TradedValue)
+
+								query2 := fmt.Sprintf("SELECT value FROM %s ORDER BY seq DESC LIMIT 1", m.Name)
+								rows2, err2 := db.Query(query2)
+								CheckErr(err2)
+
+								for rows2.Next() {
+									var nowValue int
+									rows2.Scan(&nowValue)
+
+									m.Profit = (nowValue - m.TradedValue) * m.Number
+								}
+
+								result = append(result, m)
+							}
+
+							c.JSON(200, gin.H{
+								"status": http.StatusOK,
+								"result": result,
+							})
+						} else {
+							c.JSON(403, gin.H{
+								"status": http.StatusUnauthorized,
+								"message": "Forbidden. Token is invalid.",
+							})
+						}
+					}
+				}
+			} else {
+				c.JSON(404, gin.H{
+					"status": http.StatusNotFound,
+					"message": "Page Not Found",
+				})
+			}
+		})
+
+		// v1/stocks => Stock 구매
+		v1.POST("/stocks/:name/:number", func(c *gin.Context) {
+			if CheckSubdomain(location.Get(c), "api") {
+				if len(c.Request.Header["Authorization"]) == 0 {
+					c.JSON(400 , gin.H{
+						"status": http.StatusBadRequest,
+						"message": "Authorization Needed. But missing.",
+					})
+				} else {
+					auth := c.Request.Header["Authorization"][0]
+
+					claims := jwt.MapClaims{}
+					_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
+						return JwtKey, nil
+					})
+
+					if err != nil {
+						c.JSON(401, gin.H{
+							"status": http.StatusUnauthorized,
+							"message": "Token is Expired.",
+						})
+					} else {
+						isValid := false
+						id := ""
+
+						for key, val := range claims {
+							if key == "ID" {
+								query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s'", val)
+								rows, err := db.Query(query)
+								CheckErr(err)
+
+								id = fmt.Sprintf("%s", val)
+
+								if CountRows(rows) == 1 {
+									isValid = true
+								}
+							}
+						}
+
+						if isValid {
+							name := c.Param("name")
+							number, errParam := strconv.Atoi(c.Param("number"))
+
+							if errParam != nil {
+								c.JSON(400, gin.H{
+									"status": http.StatusBadRequest,
+									"message": "number should be numbers.",
+								})
+							} else {
+								if name != "" && number != 0 {
+									query2 := fmt.Sprintf("SELECT value FROM public.%s ORDER BY seq DESC LIMIT 1", name)
+									rows2, err2 := db.Query(query2)
+									
+									if err2 != nil {
+										c.JSON(400, gin.H{
+											"status": http.StatusBadRequest,
+											"message": fmt.Sprintf("No Company Named '%s'", name),
+										})
+									} else {
+										var nowPrice int
+
+										for rows2.Next() {
+											rows2.Scan(&nowPrice)
+										}
+
+										query3 := fmt.Sprintf("SELECT money FROM public.user WHERE id='%s'", id)
+										rows3, err3 := db.Query(query3)
+										CheckErr(err3)
+
+										var ownedMoney int
+
+										for rows3.Next() {
+											rows3.Scan(&ownedMoney)
+										}
+
+										// 보유한 돈이 주식을 사기에 충분하다면
+										if nowPrice * number < ownedMoney {
+											query4 := fmt.Sprintf("INSERT INTO public.stocks(company_name, number, traded_value, trader_id, date) VALUES('%s', %d, %d, '%s', '%s')",
+											name, number, nowPrice, id, getNowTime())
+											_, err4 := db.Query(query4)
+											CheckErr(err4)
+
+											c.JSON(200, gin.H{
+												"status": http.StatusOK,
+												"message": "Successfully Bought.",
+											})
+										} else {
+											c.JSON(400, gin.H{
+												"status": http.StatusBadRequest,
+												"message": "More Money Needed.",
+											})
+										}
+									}
+								} else {
+									c.JSON(400, gin.H{
+										"status": http.StatusBadRequest,
+										"message": "name, number Needed. But something's missing or zero.",
+									})
+								}
+							}
+						} else {
+							c.JSON(403, gin.H{
+								"status": http.StatusForbidden,
+								"message": "Forbidden. Token is invalid.",
+							})
+						}
+					}
+				}
+			}
+		})
+
+		// v1/stock => Stock 판매
+		v1.DELETE("/stocks/:name/:number", func(c *gin.Context) {
+			if CheckSubdomain(location.Get(c), "api") {
+				if len(c.Request.Header["Authorization"]) == 0 {
+					c.JSON(400 , gin.H{
+						"status": http.StatusBadRequest,
+						"message": "Authorization Needed. But missing.",
+					})
+				} else {
+					auth := c.Request.Header["Authorization"][0]
+
+					claims := jwt.MapClaims{}
+					_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
+						return JwtKey, nil
+					})
+
+					if err != nil {
+						c.JSON(401, gin.H{
+							"status": http.StatusUnauthorized,
+							"message": "Token is Expired.",
+						})
+					} else {
+						isValid := false
+						id := ""
+
+						for key, val := range claims {
+							if key == "ID" {
+								query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s'", val)
+								rows, err := db.Query(query)
+								CheckErr(err)
+
+								id = fmt.Sprintf("%s", val)
+
+								if CountRows(rows) == 1 {
+									isValid = true
+								}
+							}
+						}
+
+						if isValid {
+							name := c.Param("name")
+							number, errParam := strconv.Atoi(c.Param("number"))
+
+							if errParam != nil {
+								c.JSON(400, gin.H{
+									"status": http.StatusBadRequest,
+									"message": "number should be numbers.",
+								})
+							} else {
+								if name != "" && number != 0 {
+									query2 := fmt.Sprintf("SELECT number FROM public.stocks WHERE trader_id='%s' AND company_name='%s'", id, name)
+									rows2, err2 := db.Query(query2)
+									CheckErr(err2)
+
+									ownedStockCount := 0
+									forCnt := 0
+
+									for rows2.Next() {
+										rows2.Scan(&forCnt)
+										ownedStockCount += forCnt
+									}
+
+									if ownedStockCount >= number {
+										var tradedValueList []int
+										processedNumber := 0
+
+										for {
+											if processedNumber == number {
+												break
+											}
+
+											query3 := fmt.Sprintf("SELECT number, traded_value FROM public.stocks WHERE trader_id='%s' AND company_name='%s' ORDER BY seq DESC LIMIT 1", id, name)
+											rows3, err3 := db.Query(query3)
+											CheckErr(err3)
+
+											var n, tradedValue int
+
+											for rows3.Next() {
+												rows3.Scan(&n, &tradedValue)
+												tradedValueList = append(tradedValueList, tradedValue)
+												
+												if processedNumber + n > number {
+													query4 := fmt.Sprintf("UPDATE public.stocks SET number=number-%d WHERE ctid IN (SELECT ctid FROM public.stocks WHERE trader_id='%s' AND company_name='%s' ORDER BY seq DESC LIMIT 1)",
+													number-processedNumber, id, name)
+													_, err4 := db.Query(query4)
+													CheckErr(err4)
+
+													processedNumber = number
+
+													break
+												} else {
+													query4 := fmt.Sprintf("DELETE FROM public.stocks WHERE ctid IN (SELECT ctid FROM public.stocks WHERE trader_id='%s' AND company_name='%s' ORDER BY seq DESC LIMIT 1)",
+													id, name)
+													_, err4 := db.Query(query4)
+													CheckErr(err4)
+													
+													processedNumber += n
+												}
+											}
+										}
+
+										query5 := fmt.Sprintf("SELECT value FROM public.%s ORDER BY seq DESC LIMIT 1", name)
+										rows5, err5 := db.Query(query5)
+										CheckErr(err5)
+
+										var nowPrice int
+										var totalProfit int
+
+										for rows5.Next() {
+											rows5.Scan(&nowPrice)
+										}
+
+										for value := range(tradedValueList) {
+											totalProfit += nowPrice-value
+										}
+
+										query6 := fmt.Sprintf("UPDATE public.user SET money=money+%d WHERE id='%s'", totalProfit, id)
+										_, err6 := db.Query(query6)
+										CheckErr(err6)
+
+										c.JSON(200, gin.H{
+											"status": http.StatusOK,
+											"message": "Successfully Selled.",
+										})
+									} else {
+										c.JSON(400, gin.H{
+											"status": http.StatusBadRequest,
+											"message": "Does not have enough stocks to sell.",
+											"ownedStockCount": ownedStockCount,
+										})
+									}
+								} else {
+									c.JSON(400, gin.H{
+										"status": http.StatusBadRequest,
+										"message": "name, number Needed. But something's missing or zero.",
+									})
+								}
+							}
+						} else {
+							c.JSON(403, gin.H{
+								"status": http.StatusForbidden,
+								"message": "Forbidden. Token is invalid.",
+							})
+						}
+					}
+				}
+			}
+		})
+	}
 
   	r.Run(":8081")
 }
@@ -1119,6 +1121,32 @@ func GetIP() string {
     return localAddr.IP.String()
 }
 
+// FormatNumbers - 숫자 천단위 쉼표 포맷팅
+func FormatNumbers(n int) string {
+	in := strconv.FormatInt(int64(n), 10)
+	numOfDigits := len(in)
+	if n < 0 {
+		numOfDigits-- // First character is the - sign (not a digit)
+	}
+	numOfCommas := (numOfDigits - 1) / 3
+
+	out := make([]byte, len(in)+numOfCommas)
+	if n < 0 {
+		in, out[0] = in[1:], '-'
+	}
+
+	for i, j, k := len(in)-1, len(out)-1, 0; ; i, j = i-1, j-1 {
+		out[j] = in[i]
+		if i == 0 {
+			return string(out)
+		}
+		if k++; k == 3 {
+			j, k = j-1, 0
+			out[j] = ','
+		}
+	}
+}
+
 func setIatExp() (int64, int64) {
 	now, _ := time.Parse("2006-01-02 15:04:05", time.Now().UTC().Format("2006-01-02 15:04:05"))
 	t := now.Sub(time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC))
@@ -1135,4 +1163,4 @@ func getNowTime() string {
 	t := time.Now()
 	result := fmt.Sprintf("%d%d%d%d%d", t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute())
 	return result
-  }
+}
