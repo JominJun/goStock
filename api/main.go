@@ -30,6 +30,7 @@ type AuthInp struct {
 type AuthOup struct {
 	ID		string
 	Name	string
+	Money	int
 	IsAdmin	bool
 	jwt.StandardClaims
 }
@@ -177,12 +178,12 @@ func main() {
 				CheckErr(err)
 				
 				if CountRows(rows) == 1 {
-					query := fmt.Sprintf("SELECT id, name, is_admin FROM public.user WHERE id='%s'", inp.ID)
+					query := fmt.Sprintf("SELECT id, name, money, is_admin FROM public.user WHERE id='%s'", inp.ID)
 					rows, err := db.Query(query)
 					CheckErr(err)
 
 					for rows.Next() {
-						err := rows.Scan(&oup.ID, &oup.Name, &oup.IsAdmin)
+						err := rows.Scan(&oup.ID, &oup.Name, &oup.Money, &oup.IsAdmin)
 						CheckErr(err)
 					}
 					
@@ -237,18 +238,21 @@ func main() {
 				})
 
 				if err != nil {
-					c.JSON(401, gin.H{
-						"status": http.StatusUnauthorized,
+					c.JSON(403, gin.H{
+						"status": http.StatusForbidden,
 						"message": "Token is Expired.",
 					})
 				} else {
 					isValid := false
+					id := ""
 
 					for key, val := range claims {
 						if key == "ID" {
 							query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s'", val)
 							rows, err := db.Query(query)
 							CheckErr(err)
+
+							id = fmt.Sprintf("%s", val)
 
 							if CountRows(rows) == 1 {
 								isValid = true
@@ -258,17 +262,24 @@ func main() {
 
 					if isValid {
 						// DB 처리
-						//query := fmt.Sprintf("SELECT id, name,  FROM public.company")
-						//rows, err := db.Query(query)
-						//CheckErr(err)
+						query := fmt.Sprintf("SELECT id, name, money, is_admin FROM public.user WHERE id='%s'", id)
+						rows, err := db.Query(query)
+						CheckErr(err)
+
+						var result AuthOup
+
+						for rows.Next() {
+							rows.Scan(&result.ID, &result.Name, &result.Money, &result.IsAdmin)
+						}
 
 						c.JSON(http.StatusOK, gin.H{
 							"status": http.StatusOK,
+							"result": result,
 						})
 					} else {
 						c.JSON(403, gin.H{
-							"status": http.StatusUnauthorized,
-							"message": "Forbidden. Token is invalid.",
+							"status": http.StatusForbidden,
+							"message": "Token is Expired.",
 						})
 					}
 				}
@@ -298,8 +309,8 @@ func main() {
 				})
 
 				if err != nil {
-					c.JSON(401, gin.H{
-						"status": http.StatusUnauthorized,
+					c.JSON(403, gin.H{
+						"status": http.StatusForbidden,
 						"message": "Token is Expired.",
 					})
 				} else {
@@ -348,8 +359,8 @@ func main() {
 						})
 					} else {
 						c.JSON(403, gin.H{
-							"status": http.StatusUnauthorized,
-							"message": "Forbidden. Token is invalid.",
+							"status": http.StatusForbidden,
+							"message": "Token is Expired.",
 						})
 					}
 				}
@@ -793,7 +804,9 @@ func main() {
 	})
 
 	// v1/stocks => Stock 구매
-
+	r.POST("/v1/stocks", func(c *gin.Context) {
+		
+	})
 
   	r.Run(":8081")
 }
