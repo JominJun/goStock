@@ -42,6 +42,14 @@ type Company struct {
 	StockValue  int
 }
 
+// MyStock - 보유 주식 API 반환 값
+type MyStock struct {
+	Name    	string
+	Number  	int
+	Profit   	int
+	TradedValue	int
+  }
+
 var domain = "api.localhost:8081"
 
 // MiddleWare - 미들웨어
@@ -207,7 +215,7 @@ func main() {
 		}
 	})
 
-	// v1/company => Company 조회
+	// v1/company => Company 전체조회
 	r.GET("/v1/company", func(c *gin.Context) {
 		if CheckSubdomain(location.Get(c), "api") {
 			if len(c.Request.Header["Authorization"]) == 0 {
@@ -270,11 +278,104 @@ func main() {
 
 						c.JSON(http.StatusOK, gin.H{
 							"status": http.StatusOK,
-							"message": companyList,
+							"result": companyList,
 						})
 					} else {
 						c.JSON(403, gin.H{
 							"status": http.StatusUnauthorized,
+							"message": "Forbidden. Token is invalid.",
+						})
+					}
+				}
+			}
+		} else {
+			c.JSON(404, gin.H{
+				"status": http.StatusNotFound,
+				"message": "Page Not Found",
+			})
+		}
+	})
+
+	// v1/company/:name => Company 조건조회
+	r.GET("/v1/company/:name", func(c *gin.Context) {
+		if CheckSubdomain(location.Get(c), "api") {
+			if len(c.Request.Header["Authorization"]) == 0 {
+				c.JSON(400 , gin.H{
+					"status": http.StatusBadRequest,
+					"message": "Authorization Needed. But missing.",
+				})
+			} else {
+				auth := c.Request.Header["Authorization"][0]
+
+				claims := jwt.MapClaims{}
+				_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
+					return JwtKey, nil
+				})
+
+				if err != nil {
+					c.JSON(401, gin.H{
+						"status": http.StatusUnauthorized,
+						"message": "Token is Expired.",
+					})
+				} else {
+					isValid := false
+
+					for key, val := range claims {
+						if key == "ID" {
+							query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s'", val)
+							rows, err := db.Query(query)
+							CheckErr(err)
+
+							if CountRows(rows) == 1 {
+								isValid = true
+							}
+						}
+					}
+
+					if isValid {
+						name := c.Param("name")
+						query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.company WHERE name='%s'", name)
+						rows, err := db.Query(query)
+						CheckErr(err)
+
+						if CountRows(rows) == 1 {
+							// DB 처리
+							query2 := fmt.Sprintf("SELECT seq, name, description FROM public.company WHERE name='%s'", name)
+							rows2, err2 := db.Query(query2)
+							CheckErr(err2)
+
+							var companyList = []Company{}
+
+							for rows2.Next() {
+								var c Company
+								errScan := rows2.Scan(&c.Seq, &c.Name, &c.Description)
+								CheckErr(errScan)
+
+								query3 := fmt.Sprintf("SELECT value FROM %s ORDER BY seq DESC LIMIT 1", c.Name)
+								rows3, err3 := db.Query(query3)
+								CheckErr(err3)
+
+								for rows3.Next() {
+									errScan2 := rows3.Scan(&c.StockValue)
+									CheckErr(errScan2)
+								}
+
+								companyList = append(companyList, c)
+							}
+
+							c.JSON(http.StatusOK, gin.H{
+								"status": http.StatusOK,
+								"result": companyList,
+							})
+						} else {
+							c.JSON(400, gin.H{
+								"status": http.StatusBadRequest,
+								"message": fmt.Sprintf("No Company Named '%s'", name),
+							})
+						}
+					} else {
+						c.JSON(403, gin.H{
+							"status": http.StatusForbidden,
 							"message": "Forbidden. Token is invalid.",
 						})
 					}
@@ -305,17 +406,10 @@ func main() {
 				})
 
 				if err != nil {
-					if err == jwt.ErrSignatureInvalid {
-						c.JSON(401, gin.H{
-							"status": http.StatusUnauthorized,
-							"message": "Token is Expired.",
-						})
-					} else {
-						c.JSON(403, gin.H{
-							"status": http.StatusForbidden,
-							"message": "Forbidden. Token is invalid.",
-						})
-					}
+					c.JSON(403, gin.H{
+						"status": http.StatusForbidden,
+						"message": "Token is Expired.",
+					})
 				} else {
 					isAdmin := false
 
@@ -407,17 +501,10 @@ func main() {
 				})
 
 				if err != nil {
-					if err == jwt.ErrSignatureInvalid {
-						c.JSON(401, gin.H{
-							"status": http.StatusUnauthorized,
-							"message": "Token is Expired.",
-						})
-					} else {
-						c.JSON(403, gin.H{
-							"status": http.StatusForbidden,
-							"message": "Forbidden. Token is invalid.",
-						})
-					}
+					c.JSON(403, gin.H{
+						"status": http.StatusForbidden,
+						"message": "Token is Expired.",
+					})
 				} else {
 					isAdmin := false
 
@@ -492,17 +579,10 @@ func main() {
 				})
 
 				if err != nil {
-					if err == jwt.ErrSignatureInvalid {
-						c.JSON(401, gin.H{
-							"status": http.StatusUnauthorized,
-							"message": "Token is Expired.",
-						})
-					} else {
-						c.JSON(403, gin.H{
-							"status": http.StatusForbidden,
-							"message": "Forbidden. Token is invalid.",
-						})
-					}
+					c.JSON(403, gin.H{
+						"status": http.StatusForbidden,
+						"message": "Token is Expired.",
+					})
 				} else {
 					isAdmin := false
 
@@ -563,6 +643,89 @@ func main() {
 		}
 	})
 	
+	// v2/stocks => 내 Stock 조회
+	r.GET("/v1/stocks", func(c *gin.Context) {
+		if CheckSubdomain(location.Get(c), "api") {
+			if len(c.Request.Header["Authorization"]) == 0 {
+				c.JSON(400 , gin.H{
+					"status": http.StatusBadRequest,
+					"message": "Authorization Needed. But missing.",
+				})
+			} else {
+				auth := c.Request.Header["Authorization"][0]
+
+				claims := jwt.MapClaims{}
+				_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
+					return JwtKey, nil
+				})
+
+				if err != nil {
+					c.JSON(403, gin.H{
+						"status": http.StatusForbidden,
+						"message": "Token is Expired.",
+					})
+				} else {
+					var id string
+					isValid := false
+
+					for key, val := range claims {
+						if key == "ID" {
+							query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s'", val)
+							rows, err := db.Query(query)
+							CheckErr(err)
+
+							if CountRows(rows) == 1 {
+								isValid = true
+								id = fmt.Sprintf("%s", val)
+							}
+						}
+					}
+
+					if isValid {
+						query := fmt.Sprintf("SELECT company_name, number, traded_value FROM stocks WHERE trader_id='%s'", id)
+						rows, err := db.Query(query)
+						CheckErr(err)
+
+						result := []MyStock{}
+
+						for rows.Next() {
+							var m MyStock
+							rows.Scan(&m.Name, &m.Number, &m.TradedValue)
+
+							query2 := fmt.Sprintf("SELECT value FROM %s ORDER BY seq DESC LIMIT 1", m.Name)
+							rows2, err2 := db.Query(query2)
+							CheckErr(err2)
+
+							for rows2.Next() {
+								var nowValue int
+								rows2.Scan(&nowValue)
+
+								m.Profit = (nowValue - m.TradedValue) * m.Number
+							}
+
+							result = append(result, m)
+						}
+
+						c.JSON(200, gin.H{
+							"status": http.StatusOK,
+							"result": result,
+						})
+					} else {
+						c.JSON(403, gin.H{
+							"status": http.StatusUnauthorized,
+							"message": "Forbidden. Token is invalid.",
+						})
+					}
+				}
+			}
+		} else {
+			c.JSON(404, gin.H{
+				"status": http.StatusNotFound,
+				"message": "Page Not Found",
+			})
+		}
+	})
+
   	r.Run(":8081")
 }
 
