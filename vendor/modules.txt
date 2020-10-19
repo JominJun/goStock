@@ -9,6 +9,9 @@ github.com/fatih/color
 github.com/gin-contrib/location
 # github.com/gin-contrib/sse v0.1.0
 github.com/gin-contrib/sse
+# github.com/gin-gonic/contrib v0.0.0-20201005132743-ca038bbf2944
+## explicit
+github.com/gin-gonic/contrib/static
 # github.com/gin-gonic/gin v1.6.3
 ## explicit
 github.com/gin-gonic/gin

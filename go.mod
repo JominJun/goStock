@@ -6,6 +6,7 @@ require (
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/fatih/color v1.9.0
 	github.com/gin-contrib/location v0.0.2
+	github.com/gin-gonic/contrib v0.0.0-20201005132743-ca038bbf2944
 	github.com/gin-gonic/gin v1.6.3
 	github.com/go-echarts/go-echarts v1.0.0 // indirect
 	github.com/go-playground/validator/v10 v10.4.0 // indirect
