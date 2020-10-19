@@ -30,6 +30,7 @@ type AuthInp struct {
 type AuthOup struct {
 	ID		string
 	Name	string
+	IsAdmin	bool
 	jwt.StandardClaims
 }
 
@@ -108,8 +109,8 @@ func main() {
 				if CountRows(rows) == 0 {
 					if inp.ID != "" && inp.PW != "" && inp.Name != "" {
 						t := time.Now()
-						query := fmt.Sprintf("INSERT INTO public.user(id, pw, name, money, register_date) VALUES('%s', '%s', '%s', %d, '%d%d%d%d%d')",
-						inp.ID, inp.PW, inp.Name, 50000, t.Year(), int(t.Month()), t.Day(), t.Hour(), t.Minute())
+						query := fmt.Sprintf("INSERT INTO public.user(id, pw, name, money, register_date, is_admin) VALUES('%s', '%s', '%s', %d, '%d%d%d%d%d', %t)",
+						inp.ID, inp.PW, inp.Name, 50000, t.Year(), int(t.Month()), t.Day(), t.Hour(), t.Minute(), false)
 						_, err := db.Query(query)
 						CheckErr(err)
 
@@ -163,12 +164,12 @@ func main() {
 				CheckErr(err)
 				
 				if CountRows(rows) == 1 {
-					query := fmt.Sprintf("SELECT id, name FROM public.user WHERE id='%s'", inp.ID)
+					query := fmt.Sprintf("SELECT id, name, is_admin FROM public.user WHERE id='%s'", inp.ID)
 					rows, err := db.Query(query)
 					CheckErr(err)
 
 					for rows.Next() {
-						err := rows.Scan(&oup.ID, &oup.Name)
+						err := rows.Scan(&oup.ID, &oup.Name, &oup.IsAdmin)
 						CheckErr(err)
 					}
 					
@@ -206,85 +207,192 @@ func main() {
 		}
 	})
 
-	// Company 조회
+	// v1/company => Company 조회
 	r.GET("/v1/company", func(c *gin.Context) {
-		if len(c.Request.Header["Authorization"]) == 0 {
-			c.JSON(400 , gin.H{
-				"status": http.StatusBadRequest,
-				"message": "Authorization Needed. But missing.",
-			})
-		} else {
-			auth := c.Request.Header["Authorization"][0]
+		if CheckSubdomain(location.Get(c), "api") {
+			if len(c.Request.Header["Authorization"]) == 0 {
+				c.JSON(400 , gin.H{
+					"status": http.StatusBadRequest,
+					"message": "Authorization Needed. But missing.",
+				})
+			} else {
+				auth := c.Request.Header["Authorization"][0]
 
-			claims := jwt.MapClaims{}
-			_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
-				return JwtKey, nil
-			})
+				claims := jwt.MapClaims{}
+				_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
+					return JwtKey, nil
+				})
 
-			if err != nil {
-				if err == jwt.ErrSignatureInvalid {
+				if err != nil {
 					c.JSON(401, gin.H{
 						"status": http.StatusUnauthorized,
 						"message": "Token is Expired.",
 					})
 				} else {
-					c.JSON(403, gin.H{
-						"status": http.StatusForbidden,
-						"message": "Forbidden. Token is invalid.",
-					})
-				}
-			} else {
-				isValid := false
+					isValid := false
 
-				for key, val := range claims {
-					if key == "ID" {
-						query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s'", val)
+					for key, val := range claims {
+						if key == "ID" {
+							query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s'", val)
+							rows, err := db.Query(query)
+							CheckErr(err)
+
+							if CountRows(rows) == 1 {
+								isValid = true
+							}
+						}
+					}
+
+					if isValid {
+						// DB 처리
+						query := fmt.Sprintf("SELECT seq, name, description FROM public.company")
 						rows, err := db.Query(query)
 						CheckErr(err)
 
-						if CountRows(rows) == 1 {
-							isValid = true
-						}
-					}
-				}
+						var companyList = []Company{}
 
-				if isValid {
-					// DB 처리
-					query := fmt.Sprintf("SELECT seq, name, description FROM public.company")
-					rows, err := db.Query(query)
-					CheckErr(err)
+						for rows.Next() {
+							var c Company
+							errScan := rows.Scan(&c.Seq, &c.Name, &c.Description)
+							CheckErr(errScan)
 
-					var companyList = []Company{}
+							query2 := fmt.Sprintf("SELECT value FROM %s ORDER BY seq DESC LIMIT 1", c.Name)
+							rows2, err2 := db.Query(query2)
+							CheckErr(err2)
 
-					for rows.Next() {
-						var c Company
-						errScan := rows.Scan(&c.Seq, &c.Name, &c.Description)
-						CheckErr(errScan)
+							for rows2.Next() {
+								errScan2 := rows2.Scan(&c.StockValue)
+								CheckErr(errScan2)
+							}
 
-						query2 := fmt.Sprintf("SELECT value FROM %s ORDER BY seq DESC LIMIT 1", c.Name)
-						rows2, err2 := db.Query(query2)
-						CheckErr(err2)
-
-						for rows2.Next() {
-							errScan2 := rows2.Scan(&c.StockValue)
-							CheckErr(errScan2)
+							companyList = append(companyList, c)
 						}
 
-						companyList = append(companyList, c)
+						c.JSON(http.StatusOK, gin.H{
+							"status": http.StatusOK,
+							"message": companyList,
+						})
+					} else {
+						c.JSON(403, gin.H{
+							"status": http.StatusUnauthorized,
+							"message": "Forbidden. Token is invalid.",
+						})
 					}
-
-					c.JSON(http.StatusOK, gin.H{
-						"status": http.StatusOK,
-						"message": companyList,
-					})
-				} else {
-					c.JSON(403, gin.H{
-						"status": http.StatusUnauthorized,
-						"message": "Forbidden. Token is invalid.",
-					})
 				}
 			}
+		} else {
+			c.JSON(404, gin.H{
+				"status": http.StatusNotFound,
+				"message": "Page Not Found",
+			})
 		}
+	})
+
+	// v1/company => Company 추가 [[ADMIN]]
+	r.POST("/v1/company", func(c *gin.Context) {
+		if CheckSubdomain(location.Get(c), "api") {
+			if len(c.Request.Header["Authorization"]) == 0 {
+				c.JSON(400 , gin.H{
+					"status": http.StatusBadRequest,
+					"message": "Authorization Needed. But missing.",
+				})
+			} else {
+				auth := c.Request.Header["Authorization"][0]
+
+				claims := jwt.MapClaims{}
+				_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
+					return JwtKey, nil
+				})
+
+				if err != nil {
+					if err == jwt.ErrSignatureInvalid {
+						c.JSON(401, gin.H{
+							"status": http.StatusUnauthorized,
+							"message": "Token is Expired.",
+						})
+					} else {
+						c.JSON(403, gin.H{
+							"status": http.StatusForbidden,
+							"message": "Forbidden. Token is invalid.",
+						})
+					}
+				} else {
+					isAdmin := false
+
+					for key, val := range claims {
+						if key == "ID" {
+							query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s' AND is_admin=true", val)
+							rows, err := db.Query(query)
+							CheckErr(err)
+
+							if CountRows(rows) == 1 {
+								isAdmin = true
+							}
+						}
+					}
+
+					if isAdmin {
+						name := c.Query("name")
+						description := c.Query("description")
+
+						if name != "" && description != "" {
+							// DB 처리
+							query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.company WHERE name='%s'", name)
+							rows, err := db.Query(query)
+							CheckErr(err)
+
+							if CountRows(rows) == 0 {
+								query2 := fmt.Sprintf("INSERT INTO public.company(name, description) VALUES('%s', '%s')", name, description)
+								_, err2 := db.Query(query2)
+								CheckErr(err2)
+
+								query3 := fmt.Sprintf("CREATE TABLE %s(seq integer, value integer NOT NULL, date text NOT NULL, PRIMARY KEY (seq))", name)
+								_, err3 := db.Exec(query3)
+								CheckErr(err3)
+
+								query4 := fmt.Sprintf("COMMENT ON TABLE %s IS '%s'", name, description)
+								_, err4 := db.Exec(query4)
+								CheckErr(err4)
+
+								query5 := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN seq ADD GENERATED ALWAYS AS IDENTITY", name)
+								_, err5 := db.Exec(query5)
+								CheckErr(err5)
+
+								c.JSON(200, gin.H{
+									"status": http.StatusOK,
+									"message": "Successfully Added.",
+								})
+							} else {
+								c.JSON(409, gin.H{
+									"status": http.StatusConflict,
+									"message": "Already Exists.",
+								})
+							}
+						} else {
+							c.JSON(400, gin.H{
+								"status": http.StatusBadRequest,
+								"message": "name, description needed. But something's missing.",
+							})
+						}
+					}
+				}
+			}
+		} else {
+			c.JSON(404, gin.H{
+				"status": http.StatusNotFound,
+				"message": "Page Not Found",
+			})
+		}
+	})
+
+	// v1/company => Company 수정 [[ADMIN]]
+	r.PUT("/v1/company", func(c *gin.Context) {
+
+	})
+
+	// v1/company => Company 파산 [[ADMIN]]
+	r.DELETE("/v1/company", func(c *gin.Context) {
+
 	})
 	
   	r.Run(":8081")
