@@ -302,6 +302,53 @@ func main() {
 			}
 		})
 
+		// v1/auth/validate => Check JWT
+		v1.GET("/auth/validate", func(c *gin.Context) {
+			if CheckSubdomain(location.Get(c), "api") {
+				if len(c.Request.Header["Authorization"]) == 0 {
+					c.JSON(400 , gin.H{
+						"status": http.StatusBadRequest,
+						"message": "Authorization Needed. But missing.",
+					})
+				} else {
+					auth := c.Request.Header["Authorization"][0]
+
+					claims := jwt.MapClaims{}
+					_, err := jwt.ParseWithClaims(auth, claims, func(token *jwt.Token) (interface{}, error) {
+						return JwtKey, nil
+					})
+
+					if err != nil {
+						c.JSON(403, gin.H{
+							"status": http.StatusForbidden,
+							"message": "Invalid Token",
+						})
+					} else {
+						isValid := false
+
+						for key, val := range claims {
+							if key == "ID" {
+								query := fmt.Sprintf("SELECT COUNT(*) as count FROM public.user WHERE id='%s'", val)
+								rows, err := db.Query(query)
+								CheckErr(err)
+
+								if CountRows(rows) == 1 {
+									isValid = true
+								}
+							}
+						}
+
+						if isValid {
+							c.JSON(200, gin.H{
+								"status": http.StatusOK,
+								"message": "Valid Token",
+							})
+						}
+					}
+				}
+			}
+		})
+
 		// v1/company => Company 전체조회
 		v1.GET("/company", func(c *gin.Context) {
 			if CheckSubdomain(location.Get(c), "api") {
