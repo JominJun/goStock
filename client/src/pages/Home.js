@@ -69,6 +69,13 @@ const Home = () => {
       });
   };
 
+  const logout = () => {
+    if (getCookieValue("access_token").length) {
+      document.cookie = "access_token=; expires=Thu, 01 Jan 1999 00:00:10 GMT;";
+      window.location.reload();
+    }
+  };
+
   const checkToken = async () => {
     await axios({
       method: "GET",
@@ -96,7 +103,12 @@ const Home = () => {
       checkToken();
     }
     if (userInfo.isValid) {
-      return <>로그인 성공</>;
+      return (
+        <>
+          <h1>로그인 성공</h1>
+          <button onClick={logout}>로그아웃</button>
+        </>
+      );
     }
   }
 
