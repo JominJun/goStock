@@ -8,6 +8,10 @@ const Home = () => {
   });
 
   const [userInfo, setUserInfo] = useState({
+    id: "",
+    isAdmin: false,
+    money: 0,
+    name: "",
     access_token: "",
     isValid: false,
   });
@@ -59,6 +63,8 @@ const Home = () => {
           response.data.access_token
         };Expires=${date.toUTCString()};Secure)`;
 
+        console.log(response.data);
+
         setUserInfo({
           ...userInfo,
           access_token: response.data.access_token,
@@ -84,9 +90,13 @@ const Home = () => {
         Authorization: getCookieValue("access_token"),
       },
     })
-      .then(() => {
+      .then((response) => {
         setUserInfo({
           ...userInfo,
+          id: response.data.result.ID,
+          isAdmin: response.data.result.IsAdmin,
+          money: response.data.result.Money,
+          name: response.data.result.Name,
           isValid: true,
         });
       })

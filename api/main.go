@@ -342,6 +342,7 @@ func main() {
 							c.JSON(200, gin.H{
 								"status": http.StatusOK,
 								"message": "Valid Token",
+								"result": claims,
 							})
 						}
 					}
