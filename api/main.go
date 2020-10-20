@@ -15,6 +15,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/gin-gonic/gin"
 	"github.com/dgrijalva/jwt-go"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/location"
 	_ "github.com/lib/pq"
 )
@@ -56,7 +57,6 @@ var domain = "api.localhost:8081"
 // MiddleWare - 미들웨어
 func MiddleWare(c *gin.Context) {
 	if CheckSubdomain(location.Get(c), "api") {
-		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Cache-Control", "no-store, no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0")
 		c.Header("Last-Modified", time.Now().String())
 		c.Header("Pragma", "no-cache")
@@ -72,6 +72,13 @@ func main() {
 
 	r.Use(location.Default())
 	r.Use(MiddleWare)
+
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"*"},
+		AllowMethods:     []string{"*"},
+		AllowHeaders:     []string{"*"},
+		AllowCredentials: true,
+	}))
 
 	// 405 SET
 	r.NoMethod(func(c *gin.Context) {
@@ -155,14 +162,14 @@ func main() {
 				var inp AuthInp
 				var oup AuthOup
 
-				if len(c.Request.Header["Authentication"]) == 0 {
+				if c.Query("id") == "" && c.Query("pw") == "" {
 					c.JSON(400 , gin.H{
 						"status": http.StatusBadRequest,
-						"message": "Authentication Needed. But missing.",
+						"message": "id and pw Needed. But something's missing.",
 					})
 				} else {
-					auth := c.Request.Header["Authentication"][0]
-					json.Unmarshal([]byte(auth), &inp)
+					inp.ID = c.Query("id")
+					inp.PW = c.Query("pw")
 					
 					// 시간 설정
 					iat, exp := setIatExp()
@@ -211,6 +218,8 @@ func main() {
 						c.JSON(401, gin.H{
 							"status": http.StatusUnauthorized,
 							"message": "Login Failed",
+							"id": inp.ID,
+							"pw": inp.PW,
 						})
 					}
 				}

@@ -4,6 +4,9 @@ github.com/dgrijalva/jwt-go
 # github.com/fatih/color v1.9.0
 ## explicit
 github.com/fatih/color
+# github.com/gin-contrib/cors v1.3.1
+## explicit
+github.com/gin-contrib/cors
 # github.com/gin-contrib/location v0.0.2
 ## explicit
 github.com/gin-contrib/location
