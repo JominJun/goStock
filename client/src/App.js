@@ -1,17 +1,13 @@
-import React, { Component } from "react";
-import { BrowserRouter, Route } from "react-router-dom";
-import Home from "./pages/Home";
-import BuyStock from "./pages/BuyStock";
+import React from "react";
+import { HashRouter as Router, Route } from "react-router-dom";
+import Home from "./routes/Home";
 
-class App extends Component {
-  render() {
-    return (
-      <BrowserRouter>
-        <Route exact path="/" component={Home} />
-        <Route exact path="/buystock" component={BuyStock} />
-      </BrowserRouter>
-    );
-  }
-}
+const App = () => {
+  return (
+    <Router>
+      <Route path="/" exact component={Home}></Route>
+    </Router>
+  );
+};
 
 export default App;
