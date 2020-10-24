@@ -10,13 +10,7 @@ const access_token = fn.getCookieValue("access_token");
 
 const Home = ({ myInfo, updateMyInfo }) => {
   useEffect(() => {
-    if (access_token.length) {
-      goValidate();
-    }
-  }, []);
-
-  const goValidate = () => {
-    if (myInfo.needValidation) {
+    if (access_token.length && myInfo.needValidation) {
       axios({
         url: apiDomain + "auth/validate",
         method: "GET",
@@ -40,11 +34,12 @@ const Home = ({ myInfo, updateMyInfo }) => {
           }
         });
     }
-  };
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myInfo.needValidation]);
 
   if (access_token.length) {
-    goValidate();
-
+    //MyInfo
     return <></>;
   } else {
     return <LoginForm />;
