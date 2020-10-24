@@ -1,6 +1,6 @@
 import { configureStore, createSlice } from "@reduxjs/toolkit";
 
-const myInfo = createSlice({
+const userInfo = createSlice({
   name: "myInfoReducer",
   initialState: {
     isLogin: false,
@@ -17,5 +17,5 @@ const myInfo = createSlice({
   },
 });
 
-export const { update } = myInfo.actions;
-export default configureStore({ reducer: myInfo.reducer });
+export const { update } = userInfo.actions;
+export default configureStore({ reducer: userInfo.reducer });
