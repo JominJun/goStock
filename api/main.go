@@ -162,7 +162,7 @@ func main() {
 				var inp AuthInp
 				var oup AuthOup
 
-				if c.Query("id") == "" && c.Query("pw") == "" {
+				if c.Query("id") == "" || c.Query("pw") == "" {
 					c.JSON(400 , gin.H{
 						"status": http.StatusBadRequest,
 						"message": "id and pw Needed. But something's missing.",
