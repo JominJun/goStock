@@ -3,6 +3,11 @@ export const createCookie = (cookieName, cookieValue, expirationDate) => {
   window.location.reload();
 };
 
+export const removeCookie = (cookieName) => {
+  document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1999 00:00:10 GMT;`;
+  window.location.reload();
+};
+
 export const getCookieValue = (key) => {
   let cookieKey = key + "=";
   let result = "";

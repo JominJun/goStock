@@ -1,17 +1,28 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import axios from "axios";
 import * as fn from "./common/function";
 
-const LoginForm = () => {
-  const apiDomain = "http://api.localhost:8081/v1/";
+const apiDomain = "http://api.localhost:8081/v1/";
 
-  const loginInfo = {
+const LoginForm = () => {
+  const [loginInfo, setLoginInfo] = useState({
     id: "",
     pw: "",
-  };
+    isLogining: false,
+  });
+
+  useEffect(() => {
+    if (loginInfo.isLogining) {
+      console.log("로딩 중...");
+    } else {
+      console.log("로딩 완료!");
+    }
+  }, [loginInfo.isLogining]);
 
   const goLogin = (e) => {
     e.preventDefault();
+
+    setLoginInfo({ ...loginInfo, isLogining: true });
 
     axios({
       url: apiDomain + "auth/login",
@@ -29,6 +40,8 @@ const LoginForm = () => {
           response.data.access_token,
           date.toUTCString(date.setHours(date.getDate()))
         );
+
+        setLoginInfo({ ...loginInfo, isLogining: false });
       })
       .catch((error) => {
         switch (error.response.status) {
@@ -41,16 +54,18 @@ const LoginForm = () => {
           default:
             break;
         }
+
+        setLoginInfo({ ...loginInfo, isLogining: false });
       });
   };
 
   const onChange = (e) => {
     switch (e.target.name) {
       case "id":
-        loginInfo.id = e.target.value;
+        setLoginInfo({ ...loginInfo, id: e.target.value });
         break;
       case "pw":
-        loginInfo.pw = e.target.value;
+        setLoginInfo({ ...loginInfo, pw: e.target.value });
         break;
       default:
         break;
@@ -59,6 +74,7 @@ const LoginForm = () => {
 
   return (
     <>
+      {loginInfo.isLogining}
       <form method="POST" onSubmit={goLogin}>
         <input name="id" type="text" placeholder="아이디" onChange={onChange} />
         <input
