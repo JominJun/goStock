@@ -4,6 +4,7 @@ const userInfo = createSlice({
   name: "myInfoReducer",
   initialState: {
     isLogin: false,
+    needValidation: true,
     isAdmin: false,
     id: "",
     name: "",
