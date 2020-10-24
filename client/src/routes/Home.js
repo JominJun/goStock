@@ -4,6 +4,7 @@ import { update } from "../store";
 import LoginForm from "./LoginForm";
 import * as fn from "./common/function";
 import axios from "axios";
+import MyInfo from "./MyInfo";
 
 const apiDomain = "http://api.localhost:8081/v1/";
 const access_token = fn.getCookieValue("access_token");
@@ -27,6 +28,7 @@ const Home = ({ myInfo, updateMyInfo }) => {
             name: response.data.name,
             money: response.data.money,
           });
+          console.log("store updated");
         })
         .catch((error) => {
           if (error.response.status === 403) {
@@ -40,7 +42,7 @@ const Home = ({ myInfo, updateMyInfo }) => {
 
   if (access_token.length) {
     //MyInfo
-    return <></>;
+    return <MyInfo />;
   } else {
     return <LoginForm />;
   }

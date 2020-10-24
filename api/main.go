@@ -211,9 +211,6 @@ func main() {
 							"status": http.StatusOK,
 							"access_token": tokenString,
 						})
-
-						// 쿠키
-						//c.SetCookie("access_token", tokenString, 1800, "", "", false, false)
 					} else {
 						c.JSON(401, gin.H{
 							"status": http.StatusUnauthorized,
