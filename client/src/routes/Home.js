@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { connect } from "react-redux";
 import { update } from "../store";
 import LoginForm from "./LoginForm";
@@ -10,6 +10,8 @@ const apiDomain = "http://api.localhost:8081/v1/";
 const access_token = fn.getCookieValue("access_token");
 
 const Home = ({ myInfo, updateMyInfo }) => {
+  const [isStoreUpdated, setIsStoreUpdated] = useState(false);
+
   useEffect(() => {
     if (access_token.length && myInfo.needValidation) {
       axios({
@@ -20,15 +22,17 @@ const Home = ({ myInfo, updateMyInfo }) => {
         },
       })
         .then((response) => {
+          let res = response.data.result;
           updateMyInfo({
             isLogin: true,
             needValidation: false,
-            isAdmin: response.data.result.isAdmin,
-            id: response.data.result.id,
-            name: response.data.name,
-            money: response.data.money,
+            isAdmin: res.IsAdmin,
+            id: res.ID,
+            name: res.Name,
+            money: res.Money,
+          }).then(() => {
+            setIsStoreUpdated(true);
           });
-          console.log("store updated");
         })
         .catch((error) => {
           if (error.response.status === 403) {
@@ -40,7 +44,7 @@ const Home = ({ myInfo, updateMyInfo }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myInfo.needValidation]);
 
-  if (access_token.length) {
+  if (access_token.length && isStoreUpdated) {
     //MyInfo
     return <MyInfo />;
   } else {
@@ -54,7 +58,7 @@ const mapStateToProps = (state) => {
 
 const mapDispatchToProps = (dispatch) => {
   return {
-    updateMyInfo: (text) => dispatch(update(text)),
+    updateMyInfo: async (text) => dispatch(update(text)),
   };
 };
 
