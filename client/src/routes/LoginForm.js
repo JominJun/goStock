@@ -46,10 +46,10 @@ const LoginForm = () => {
       .catch((error) => {
         switch (error.response.status) {
           case 400:
-            console.log("모든 칸을 채워주세요");
+            console.log("Should Fill Every Content");
             break;
           case 401:
-            console.log("로그인 실패");
+            console.log("Login Failed");
             break;
           default:
             break;
@@ -76,14 +76,9 @@ const LoginForm = () => {
     <>
       {loginInfo.isLogining}
       <form method="POST" onSubmit={goLogin}>
-        <input name="id" type="text" placeholder="아이디" onChange={onChange} />
-        <input
-          name="pw"
-          type="password"
-          placeholder="비밀번호"
-          onChange={onChange}
-        />
-        <button type="submit">로그인</button>
+        <input name="id" type="text" placeholder="ID" onChange={onChange} />
+        <input name="pw" type="password" placeholder="PW" onChange={onChange} />
+        <button type="submit">Login</button>
       </form>
     </>
   );

@@ -44,9 +44,11 @@ const Home = ({ myInfo, updateMyInfo }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myInfo.needValidation]);
 
-  if (access_token.length && isStoreUpdated) {
-    //MyInfo
-    return <MyInfo />;
+  if (access_token.length) {
+    if (isStoreUpdated) {
+      return <MyInfo />;
+    }
+    return <>Page Reload Needed</>;
   } else {
     return <LoginForm />;
   }

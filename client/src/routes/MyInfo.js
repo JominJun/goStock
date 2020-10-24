@@ -9,7 +9,10 @@ const MyInfo = ({ myInfo }) => {
       <p>
         {myInfo.name}({myInfo.id})
       </p>
-      <p>{fn.numberWithCommas(myInfo.money)}원</p>
+      <p>\{fn.numberWithCommas(myInfo.money)}</p>
+      <a href="/company">
+        <button>Show Companies</button>
+      </a>
     </>
   );
 };
