@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import * as fn from "./common/function";
+import * as fn from "./functions/function";
 
 const apiDomain = "http://api.localhost:8081/v1/";
 

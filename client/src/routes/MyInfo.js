@@ -1,6 +1,6 @@
 import React from "react";
 import { connect } from "react-redux";
-import * as fn from "./common/function";
+import * as fn from "./functions/function";
 
 const MyInfo = ({ myInfo }) => {
   return (

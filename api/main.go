@@ -1,17 +1,22 @@
 package main
 
 import (
+	"os"
 	"fmt"
 	"net"
 	"time"
+	"syscall"
 	"strings"
 	"strconv"
 	"net/url"
-  	"net/http"
+	"net/http"
+	"math/big"
+	"os/signal"
+	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
-	"crypto/sha256"
 	"github.com/fatih/color"
 	"github.com/gin-gonic/gin"
 	"github.com/dgrijalva/jwt-go"
@@ -66,6 +71,69 @@ func MiddleWare(c *gin.Context) {
 	}
 }
 
+// Init - Ticker
+func Init(sc chan os.Signal, db *sql.DB) {
+	ticker := time.NewTicker(1 * time.Second)
+
+	go func() {
+		for {
+			select {
+				case <-ticker.C:
+					cycle := 1
+
+					t := time.Now()
+					fmt.Println(t.Minute(), t.Second())
+
+					if t.Minute() % cycle == 0 && t.Second() == 0 {
+						n, err := rand.Int(rand.Reader, big.NewInt(100))
+						CheckErr(err)
+						fmt.Println("랜덤값: ", n)
+		
+						date := getNowTime()
+						intDate, err2 := strconv.Atoi(date)
+						CheckErr(err2)
+		
+						query := fmt.Sprintf("SELECT name FROM company")
+						rows, err := db.Query(query)
+						CheckErr(err)
+		
+						var companyList []string
+						for rows.Next() {
+							var companyName string
+							rows.Scan(&companyName)
+							companyList = append(companyList, companyName)
+						}
+
+						query2 := fmt.Sprintf("SELECT COUNT(*) as count FROM stocks WHERE date BETWEEN %d AND %d", intDate-cycle, intDate)
+						rows2, err2 := db.Query(query2)
+						CheckErr(err2)
+						totalTradingVolume := CountRows(rows2)
+						
+						fmt.Println("totalTradingVolume: ", totalTradingVolume)
+		
+						for _, companyName := range(companyList) {
+							query := fmt.Sprintf("SELECT COUNT(*) as count FROM stocks WHERE company_name='%s' AND (date BETWEEN %d AND %d)", companyName, intDate-cycle, intDate)
+							rows, err := db.Query(query)
+							CheckErr(err)
+		
+							tradedAmount := CountRows(rows)
+							text := fmt.Sprintf("%s : %d", companyName, tradedAmount)
+							fmt.Println(text)
+
+							if totalTradingVolume != 0 {
+								fmt.Println(tradedAmount/totalTradingVolume * 100, "%")
+							}
+						}
+					}
+					
+				case <-sc:
+					ticker.Stop()
+					return
+				}
+			}
+		}()
+}
+
 func main() {
 	var r *gin.Engine
 	r = gin.Default()
@@ -99,6 +167,12 @@ func main() {
 	db := ConnectToDB()
 	CheckErr(db.Ping())
 	defer db.Close()
+
+	// Channel Setting
+	sc := make(chan os.Signal, 1)
+	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
+	<-sc
+	Init(sc, db)
 
 	JwtKey := []byte("JWT_SECRET_KEY")
 
@@ -1215,6 +1289,6 @@ func setIatExp() (int64, int64) {
 
 func getNowTime() string {
 	t := time.Now()
-	result := fmt.Sprintf("%d%d%d%d%d", t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute())
-	return result
+	date := fmt.Sprintf("%4d%02d%02d%02d%02d", t.Year(), int(t.Month()), t.Day(), t.Hour(), t.Minute())
+	return date
 }

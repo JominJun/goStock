@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { connect } from "react-redux";
 import { update } from "../store";
 import LoginForm from "./LoginForm";
-import * as fn from "./common/function";
+import * as fn from "./functions/function";
 import axios from "axios";
 import MyInfo from "./MyInfo";
 
@@ -13,7 +13,7 @@ const Home = ({ myInfo, updateMyInfo }) => {
   const [isStoreUpdated, setIsStoreUpdated] = useState(false);
 
   useEffect(() => {
-    if (access_token.length && myInfo.needValidation) {
+    if (myInfo.needValidation && access_token.length) {
       axios({
         url: apiDomain + "auth/validate",
         method: "GET",
@@ -37,6 +37,14 @@ const Home = ({ myInfo, updateMyInfo }) => {
         .catch((error) => {
           if (error.response.status === 403) {
             fn.removeCookie("access_token");
+            updateMyInfo({
+              isLogin: false,
+              needValidation: false,
+              isAdmin: false,
+              id: "",
+              name: "",
+              money: 0,
+            });
           }
         });
     }
