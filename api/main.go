@@ -84,7 +84,7 @@ func Init(sc chan os.Signal, db *sql.DB) {
 					t := time.Now()
 					fmt.Println(t.Minute(), t.Second())
 
-					if t.Minute() % cycle == 0 && t.Second() == 0 {
+					//if t.Minute() % cycle == 0 && t.Second() == 0 {
 						n, err := rand.Int(rand.Reader, big.NewInt(100))
 						CheckErr(err)
 						fmt.Println("랜덤값: ", n)
@@ -104,27 +104,79 @@ func Init(sc chan os.Signal, db *sql.DB) {
 							companyList = append(companyList, companyName)
 						}
 
-						query2 := fmt.Sprintf("SELECT COUNT(*) as count FROM stocks WHERE date BETWEEN %d AND %d", intDate-cycle, intDate)
+						query2 := fmt.Sprintf("SELECT company_name, number, traded_value FROM stocks WHERE date BETWEEN %d AND %d", intDate-cycle, intDate)
 						rows2, err2 := db.Query(query2)
 						CheckErr(err2)
-						totalTradingVolume := CountRows(rows2)
-						
-						fmt.Println("totalTradingVolume: ", totalTradingVolume)
-		
-						for _, companyName := range(companyList) {
-							query := fmt.Sprintf("SELECT COUNT(*) as count FROM stocks WHERE company_name='%s' AND (date BETWEEN %d AND %d)", companyName, intDate-cycle, intDate)
-							rows, err := db.Query(query)
-							CheckErr(err)
-		
-							tradedAmount := CountRows(rows)
-							text := fmt.Sprintf("%s : %d", companyName, tradedAmount)
-							fmt.Println(text)
 
-							if totalTradingVolume != 0 {
-								fmt.Println(tradedAmount/totalTradingVolume * 100, "%")
+						query3 := fmt.Sprintf("SELECT COUNT(*) as count FROM stocks WHERE date BETWEEN %d AND %d", intDate-cycle, intDate)
+						fmt.Println(query3)
+						rows3, err3 := db.Query(query3)
+						CheckErr(err3)
+
+						tradedStocks := []MyStock{}
+
+						if CountRows(rows3) > 0 {
+							for rows2.Next() {
+								var m MyStock
+								rows2.Scan(&m.Name, &m.Number, &m.TradedValue)
+	
+								query4 := fmt.Sprintf("SELECT value FROM %s ORDER BY seq DESC LIMIT 1", m.Name)
+								rows4, err4 := db.Query(query4)
+								CheckErr(err4)
+	
+								for rows4.Next() {
+									var nowValue int
+									rows4.Scan(&nowValue)
+	
+									m.Profit = (nowValue - m.TradedValue) * m.Number
+								}
+	
+								tradedStocks = append(tradedStocks, m)
 							}
 						}
-					}
+
+						var ownedStockCompanyName []string
+						totalTradingVolume := 0
+
+						for _, company := range(tradedStocks) {
+							totalTradingVolume += company.Number
+							
+							isAlreadyExists := false
+							for _, name := range(ownedStockCompanyName) {
+								if name == company.Name {
+									isAlreadyExists = true
+								}
+							}
+
+							if !isAlreadyExists {
+								ownedStockCompanyName = append(ownedStockCompanyName, company.Name)
+							}
+						}
+
+						for _, name := range(ownedStockCompanyName) {
+							fmt.Println(name)
+						}
+
+						fmt.Println(tradedStocks)
+						fmt.Println("총 거래량: ", totalTradingVolume)
+
+						//var companyTradingVolumeList []int
+		
+						// for _, companyName := range(companyList) {
+						// 	query := fmt.Sprintf("SELECT COUNT(*) as count FROM stocks WHERE company_name='%s' AND (date BETWEEN %d AND %d)", companyName, intDate-cycle, intDate)
+						// 	rows, err := db.Query(query)
+						// 	CheckErr(err)
+		
+						// 	tradedAmount := CountRows(rows)
+						// 	text := fmt.Sprintf("%s : %d", companyName, tradedAmount)
+						// 	fmt.Println(text)
+
+						// 	if totalTradingVolume != 0 {
+						// 		tradeRate := (tradedAmount * 100) / totalTradingVolume
+						// 		fmt.Println(tradeRate , "%")
+						// 	}
+						// }
+					//}
 					
 				case <-sc:
 					ticker.Stop()
@@ -171,7 +223,6 @@ func main() {
 	// Channel Setting
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
-	<-sc
 	Init(sc, db)
 
 	JwtKey := []byte("JWT_SECRET_KEY")
@@ -1199,7 +1250,7 @@ func main() {
 // CheckErr - 에러 체크
 func CheckErr(err error) {
 	if err != nil {
-	  panic(err)
+	  fmt.Println(err)
 	}
 }
 
