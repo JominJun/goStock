@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"net"
 	"time"
+	"math"
 	"syscall"
 	"strings"
 	"strconv"
 	"net/url"
 	"net/http"
-	"math/big"
 	"os/signal"
-	"crypto/rand"
+	"math/rand"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -79,104 +79,130 @@ func Init(sc chan os.Signal, db *sql.DB) {
 		for {
 			select {
 				case <-ticker.C:
-					cycle := 1
+					cycle := 10
 
 					t := time.Now()
-					fmt.Println(t.Minute(), t.Second())
 
-					//if t.Minute() % cycle == 0 && t.Second() == 0 {
-						n, err := rand.Int(rand.Reader, big.NewInt(100))
-						CheckErr(err)
-						fmt.Println("랜덤값: ", n)
-		
+					if t.Minute() % cycle == 0 && t.Second() == 0 {
 						date := getNowTime()
 						intDate, err2 := strconv.Atoi(date)
 						CheckErr(err2)
 		
 						query := fmt.Sprintf("SELECT name FROM company")
 						rows, err := db.Query(query)
-						CheckErr(err)
-		
-						var companyList []string
-						for rows.Next() {
-							var companyName string
-							rows.Scan(&companyName)
-							companyList = append(companyList, companyName)
-						}
+						
+						if err == nil {
+							var companyList []string
 
-						query2 := fmt.Sprintf("SELECT company_name, number, traded_value FROM stocks WHERE date BETWEEN %d AND %d", intDate-cycle, intDate)
-						rows2, err2 := db.Query(query2)
-						CheckErr(err2)
-
-						query3 := fmt.Sprintf("SELECT COUNT(*) as count FROM stocks WHERE date BETWEEN %d AND %d", intDate-cycle, intDate)
-						fmt.Println(query3)
-						rows3, err3 := db.Query(query3)
-						CheckErr(err3)
-
-						tradedStocks := []MyStock{}
-
-						if CountRows(rows3) > 0 {
-							for rows2.Next() {
-								var m MyStock
-								rows2.Scan(&m.Name, &m.Number, &m.TradedValue)
-	
-								query4 := fmt.Sprintf("SELECT value FROM %s ORDER BY seq DESC LIMIT 1", m.Name)
-								rows4, err4 := db.Query(query4)
-								CheckErr(err4)
-	
-								for rows4.Next() {
-									var nowValue int
-									rows4.Scan(&nowValue)
-	
-									m.Profit = (nowValue - m.TradedValue) * m.Number
-								}
-	
-								tradedStocks = append(tradedStocks, m)
+							for rows.Next() {
+								var companyName string
+								rows.Scan(&companyName)
+								companyList = append(companyList, companyName)
 							}
-						}
 
-						var ownedStockCompanyName []string
-						totalTradingVolume := 0
+							query2 := fmt.Sprintf("SELECT company_name, number, traded_value FROM stocks WHERE date BETWEEN %d AND %d", intDate-cycle, intDate)
+							rows2, err2 := db.Query(query2)
+							CheckErr(err2)
 
-						for _, company := range(tradedStocks) {
-							totalTradingVolume += company.Number
+							query3 := fmt.Sprintf("SELECT COUNT(*) as count FROM stocks WHERE date BETWEEN %d AND %d", intDate-cycle, intDate)
+							rows3, err3 := db.Query(query3)
 							
-							isAlreadyExists := false
-							for _, name := range(ownedStockCompanyName) {
-								if name == company.Name {
-									isAlreadyExists = true
+							if err3 == nil {
+								tradedStocks := []MyStock{}
+
+								if CountRows(rows3) > 0 {
+									for rows2.Next() {
+										var m MyStock
+										rows2.Scan(&m.Name, &m.Number, &m.TradedValue)
+			
+										query4 := fmt.Sprintf("SELECT value FROM %s ORDER BY seq DESC LIMIT 1", m.Name)
+										rows4, err4 := db.Query(query4)
+										CheckErr(err4)
+			
+										for rows4.Next() {
+											var nowValue int
+											rows4.Scan(&nowValue)
+			
+											m.Profit = (nowValue - m.TradedValue) * m.Number
+										}
+			
+										tradedStocks = append(tradedStocks, m)
+									}
+								}
+
+								var tradedStockCompanyName []string
+								totalTradingVolume := 0
+
+								for _, company := range(tradedStocks) {
+									totalTradingVolume += company.Number
+									
+									isAlreadyExists := false
+									for _, name := range(tradedStockCompanyName) {
+										if name == company.Name {
+											isAlreadyExists = true
+										}
+									}
+
+									if !isAlreadyExists {
+										tradedStockCompanyName = append(tradedStockCompanyName, company.Name)
+									}
+								}
+
+								var tradedStockCompanyNumber []int
+
+								for _, name := range(tradedStockCompanyName) {
+									number := 0
+									for _, company := range(tradedStocks) {
+										if name == company.Name {
+											number += company.Number
+										}
+									}
+									tradedStockCompanyNumber = append(tradedStockCompanyNumber, number)
+								}
+
+								var tradedStockPercentage []float64
+
+								for i := range(tradedStockCompanyName) {
+									percentage := math.Floor(float64(tradedStockCompanyNumber[i]) * 100 / float64(totalTradingVolume) * 10) / 10
+									tradedStockPercentage = append(tradedStockPercentage, percentage)
+								}
+
+								// (±(랜덤(0~0.15) * 현재주식값 + (랜덤(0~75) - 랜덤(25~50)) * 구매비율) - (현재주식값 - 5000) * 0.01 / 500)
+								// => (반올림후) * 랜덤(1~10) + 랜덤(1~10)
+								rand.Seed(time.Now().UnixNano())
+
+								randPart1 := math.Floor(rand.Float64() * (0.15) * float64(100)) / 100
+								randPart2 := float64(rand.Intn(75))
+								randPart3 := float64(rand.Intn(25) + 25)
+
+								randSignPart := rand.Intn(2)
+								randSign := 1.0
+								
+								if randSignPart == 0 {
+									randSign = -1.0
+								}
+
+								for j, companyName := range(tradedStockCompanyName) {
+									query := fmt.Sprintf("SELECT value FROM %s ORDER BY seq DESC LIMIT 1", companyName)
+									rows, err := db.Query(query)
+									CheckErr(err)
+
+									var value float64
+
+									for rows.Next() {
+										errScan := rows.Scan(&value)
+										CheckErr(errScan)
+									}
+
+									changeAmount := int((randSign * (randPart1 * value + (randPart2 - randPart3 * tradedStockPercentage[j])) - (value - 5000) * 0.01) / 500) * rand.Intn(10) + rand.Intn(10) + 10
+
+									query2 := fmt.Sprintf("INSERT INTO %s(value, date) VALUES(%d, '%s')", companyName, int(value) + changeAmount, getNowTime())
+									_, err2 := db.Query(query2)
+									CheckErr(err2)
 								}
 							}
-
-							if !isAlreadyExists {
-								ownedStockCompanyName = append(ownedStockCompanyName, company.Name)
-							}
 						}
-
-						for _, name := range(ownedStockCompanyName) {
-							fmt.Println(name)
-						}
-
-						fmt.Println(tradedStocks)
-						fmt.Println("총 거래량: ", totalTradingVolume)
-
-						//var companyTradingVolumeList []int
-		
-						// for _, companyName := range(companyList) {
-						// 	query := fmt.Sprintf("SELECT COUNT(*) as count FROM stocks WHERE company_name='%s' AND (date BETWEEN %d AND %d)", companyName, intDate-cycle, intDate)
-						// 	rows, err := db.Query(query)
-						// 	CheckErr(err)
-		
-						// 	tradedAmount := CountRows(rows)
-						// 	text := fmt.Sprintf("%s : %d", companyName, tradedAmount)
-						// 	fmt.Println(text)
-
-						// 	if totalTradingVolume != 0 {
-						// 		tradeRate := (tradedAmount * 100) / totalTradingVolume
-						// 		fmt.Println(tradeRate , "%")
-						// 	}
-						// }
-					//}
+					}
 					
 				case <-sc:
 					ticker.Stop()
